@@ -5,7 +5,19 @@ import casadi as ca
 from types import SimpleNamespace
 import matplotlib.pyplot as plt
 
-
+"""
+To use this solver, install the prerequisites using the following steps
+1. Install Julia:
+- wget https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.1-linux-x86_64.tar.gz
+- tar zxvf julia-1.10.1-linux-x86_64.tar.gz
+- export PATH="$PATH:/path/to/<Julia directory>/bin"
+2. Install Julia packages:
+- In the Julia REPL package manager: 
+-- add PyCall
+-- add PATHSolver@1.1.1 (side note, only version 1.1.1 works when called from pyjulia)
+3. Install pyjulia:
+- python3 -m pip install julia
+"""
 
 
 class CollaborativeGame():
