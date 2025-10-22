@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.log
+*.tmp
+*.DS_Store
+
+# Simulation result/output folders
+outputs/
+results/
+videos/
+plots/
+*.mp4
+*.gif
+
+# Virtual environment
+venv/
+env/
