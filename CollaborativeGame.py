@@ -41,7 +41,7 @@ hist_col = ['c','m','k','y']
 Tf = 10.0
 alpha_vec = [0.05, 0.25, 0.5, 0.95]
 
-N = 15
+N = 10
 dt = 0.1
 
 Obstcles = []
