@@ -39,7 +39,7 @@ RT_Plot = True
 hist_col = ['c','m','k','y']
 
 Tf = 10.0
-alpha_vec = [0.05, 0.25, 0.5]
+alpha_vec = [0.05, 0.25, 0.5, 0.95]
 
 N = 15
 dt = 0.1
@@ -59,7 +59,7 @@ Scenarios =[]
 # Scenarios.append({'Name': 'Scenario_4_WithObs', 'x1_init': np.array([[6, -5]]), 'x2_init':np.array([[4, -3]]), 'x1_des': np.array([[7, 5]]), 'theta_des':np.deg2rad(180), 'Obs': Obstcles})
 # Scenarios.append({'Name': 'Scenario_5', 'x1_init': np.array([[5, 2]]), 'x2_init':np.array([[2, 2]]), 'x1_des': np.array([[5, 8]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
-Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(30), 'Obs': [{'Pos': np.array([[8,2]]), "diam": 0.5}]})
+Scenarios.append({'Name': 'Scenario_6_WithObs', 'x1_init': np.array([[3, 0]]), 'x2_init':np.array([[0, 0]]), 'x1_des': np.array([[7, 0]]), 'theta_des':np.deg2rad(30), 'Obs': [{'Pos': np.array([[6,2]]), "diam": 0.5}]})
 
 
 for Scenario in Scenarios:
@@ -101,7 +101,7 @@ for Scenario in Scenarios:
             ax_xy.plot(Obstcle['Pos'][0,0]+x, Obstcle['Pos'][0,1]+y,'k-', linewidth=3)
         
 
-        ax_vel = plt.subplot2grid((2, 3), (0, 2), colspan=1, rowspan=1)
+        ax_vel = plt.subplot2grid((3, 3), (0, 2), colspan=1, rowspan=1)
         p1_vel = ax_vel.plot([],[], 'gs', markersize=6, label='Human')[0]
         p2_vel = ax_vel.plot([],[], 'bs', markersize=6, label='Robot')[0]
         p1_vel_pred = ax_vel.plot([], [], 'g-', markersize=3)[0]
@@ -117,7 +117,23 @@ for Scenario in Scenarios:
         ax_vel.set_xlabel('Time [Sec]')
         ax_vel.set_ylabel('Velocity [m/s]')
 
-        ax_dist = plt.subplot2grid((2, 3), (1, 2), colspan=1, rowspan=1)
+        ax_acc = plt.subplot2grid((3, 3), (1, 2), colspan=1, rowspan=1)
+        p1_acc = ax_acc.plot([],[], 'gs', markersize=6, label='Human')[0]
+        p2_acc = ax_acc.plot([],[], 'bs', markersize=6, label='Robot')[0]
+        p1_acc_pred = ax_acc.plot([], [], 'g-', markersize=3)[0]
+        p2_acc_pred = ax_acc.plot([], [], 'b-', markersize=3)[0]
+        p1_acc_hist = ax_acc.plot([], [], 'g-.', markersize=3)[0]
+        p2_acc_hist = ax_acc.plot([], [], 'b-.', markersize=3)[0]
+        ax_acc.set_xlim([0,Tf])
+        ax_acc.set_ylim([0,max(GameSol.a1_max, GameSol.a2_max)+1])
+        p1_acc_max = ax_acc.plot([0, Tf], [GameSol.a1_max, GameSol.a1_max], 'g:', markersize=3)[0]
+        p2_acc_max = ax_acc.plot([0, Tf], [GameSol.a2_max, GameSol.a2_max], 'b:', markersize=3)[0]
+        ax_acc.grid(True)
+        ax_acc.legend()
+        ax_acc.set_xlabel('Time [Sec]')
+        ax_acc.set_ylabel('Acceleration [m/s^2]')
+
+        ax_dist = plt.subplot2grid((3, 3), (2, 2), colspan=1, rowspan=1)
         p12_dist = ax_dist.plot([],[], 'rs', markersize=6)[0]
         p12_dist_pred = ax_dist.plot([], [], 'b-', markersize=3)[0]
         p12_dist_hist = ax_dist.plot([], [], 'b-.', markersize=3)[0]
@@ -146,6 +162,7 @@ for Scenario in Scenarios:
         x1_state, x2_state = x1_init, x2_init
         v1_state, v2_state = np.zeros((1,2)), np.zeros((1,2))
         EndSimulation = False
+        i_acc = 0
         while not EndSimulation:
             # Save The game
 
@@ -164,7 +181,7 @@ for Scenario in Scenarios:
                 z0[GameSol.indx_ax2:GameSol.indx_ax2+N-1] = GameSol.sol.a2_sol[1:,0]
                 z0[GameSol.indx_ay2:GameSol.indx_ay2+N-1] = GameSol.sol.a2_sol[1:,1]
 
-                GameSol.Solve(x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
             if not GameSol.success:
                 # calculate mpc initial guess for human:
                 x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
@@ -184,7 +201,7 @@ for Scenario in Scenarios:
                 z0[GameSol.indx_ax2:GameSol.indx_ax2+N] = a2_guess[:,0]
                 z0[GameSol.indx_ay2:GameSol.indx_ay2+N] = a2_guess[:,1]
                     
-                GameSol.Solve(x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
             
             if GameSol.success:
                 i_acc = 0
@@ -192,12 +209,10 @@ for Scenario in Scenarios:
                 i_acc += 1
 
             # Dynamics
-            a1_cmd = LimitedCmd(GameSol.sol.a1_sol[i_acc,:], GameSol.a1_max)
+            a1_cmd = LimitedCmd(GameSol.sol.a1_sol[i_acc,:] + np.random.normal(0.0, 1.0, 2), GameSol.a1_max)
             a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc,:], GameSol.a2_max)
             x1_state = x1_state + dt * v1_state + 0.5*dt**2*a1_cmd
             v1_state = v1_state + dt * a1_cmd
-            # if np.linalg.norm(x1_state-(x2_state + dt * v2_cmd)) > GameSol.d_max and np.linalg.norm(x1_state-(x2_state + dt * v2_cmd)) < GameSol.d_min:
-            #     v2_cmd = v1_cmd
             x2_state = x2_state + dt * v2_state + 0.5*dt**2*a2_cmd
             v2_state = v2_state + dt * a2_cmd
 
@@ -213,8 +228,8 @@ for Scenario in Scenarios:
             t_hist = np.vstack((t_hist, t))
 
             if RT_Plot:
-                p1_plot.set_data(x1_state[0,0], x1_state[0,1])
-                p2_plot.set_data(x2_state[0,0], x2_state[0,1])
+                p1_plot.set_data([x1_state[0,0]], [x1_state[0,1]])
+                p2_plot.set_data([x2_state[0,0]], [x2_state[0,1]])
                 p12_line.set_data([x1_state[0,0], x2_state[0,0]],[x1_state[0,1], x2_state[0,1]])
                 indx = np.linspace(0, N,1+len(p12_line_pred))
                 for i in range(len(p12_line_pred)):
@@ -224,21 +239,27 @@ for Scenario in Scenarios:
                 p2_pred.set_data(GameSol.sol.x2_sol[:,0], GameSol.sol.x2_sol[:,1])
                 p1_hist.set_data(x1_hist[:,0], x1_hist[:,1])
                 p2_hist.set_data(x2_hist[:,0], x2_hist[:,1])
-                tgt1_plot.set_data(x1_des[0,0], x1_des[0,1])
-                tgt2_plot.set_data(x2_des[0,0], x2_des[0,1])
+                tgt1_plot.set_data([x1_des[0,0]], [x1_des[0,1]])
+                tgt2_plot.set_data([x2_des[0,0]], [x2_des[0,1]])
                 ax_xy.set_title(f'Alpha is {alpha}')
                 ax_xy.legend()
                 
                 t_pred = np.linspace(t-dt, t-dt+N*dt, N+1)
-                p1_vel.set_data(t, np.linalg.norm(v1_state))
-                p2_vel.set_data(t, np.linalg.norm(v2_state))
+                p1_vel.set_data([t], [np.linalg.norm(v1_state)])
+                p2_vel.set_data([t], [np.linalg.norm(v2_state)])
                 p1_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v1_sol, axis=1))
                 p2_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v2_sol, axis=1))
                 p1_vel_hist.set_data(t_hist, np.linalg.norm(v1_hist, axis=1))
                 p2_vel_hist.set_data(t_hist, np.linalg.norm(v2_hist, axis=1))
 
-                # t_pred = np.linspace(t-dt, t-dt+N*dt, N+1)
-                p12_dist.set_data(t, np.linalg.norm(x1_state-x2_state))
+                p1_acc.set_data([t], [np.linalg.norm(a1_cmd)])
+                p2_acc.set_data([t], [np.linalg.norm(a2_cmd)])
+                p1_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a1_sol, axis=1))
+                p2_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a2_sol, axis=1))
+                p1_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a1_hist, axis=1))
+                p2_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a2_hist, axis=1))
+
+                p12_dist.set_data([t], [np.linalg.norm(x1_state-x2_state)])
                 p12_dist_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.x1_sol-GameSol.sol.x2_sol, axis=1))
                 p12_dist_hist.set_data(t_hist[:, 0], np.linalg.norm(x1_hist-x2_hist, axis=1))
 

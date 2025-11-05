@@ -21,7 +21,7 @@ To use this solver, install the prerequisites using the following steps
 
 
 class CollaborativeGame():
-    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.025, Obstcles: list = None, verbose: int = 0):
+    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.1, Obstcles: list = None, verbose: int = 0):
         self.N = N
         self.dt = dt
         self.verbose = verbose
@@ -29,10 +29,18 @@ class CollaborativeGame():
         self.n_dim = 2
 
         self.d_min, self.d_max = d-delta_d, d+delta_d
-        self.v1_max = 2.0
-        self.a1_max = 10.0
-        self.v2_max = 4.0
-        self.a2_max = 100.0
+        self.v1_max = 1.0
+        self.v1_min = 0.25
+        self.a1_max = 5.0
+        self.v2_max = 3.0
+        self.v2_min = 0.5
+        self.a2_max = 20.0
+
+        if self.v1_max < self.v1_min:
+            raise ValueError(f"Expected v1_max >= v1_min, received v1_max={self.v1_max} and v1_min={self.v1_min}")
+        if self.v2_max < self.v2_min:
+            raise ValueError(f"Expected v2_max >= v2_min, received v2_max={self.v2_max} and v2_min={self.v2_min}")
+
 
         # Define the states and controls
         x1, x2 = ca.SX.sym('x1', N+1, 2), ca.SX.sym('x2', N+1, 2)
@@ -42,10 +50,12 @@ class CollaborativeGame():
         v1_0, v2_0 = ca.SX.sym('v1_0', 1, 2), ca.SX.sym('v2_0', 1, 2)
         x1_f, x2_f = ca.SX.sym('x1_f', 1, 2), ca.SX.sym('x2_f', 1, 2)
         alpha = ca.SX.sym('alpha')
+        Slack = ca.SX.sym('Slack', N)
 
         shared_cost = 0.0
-        J1 = 0.5*(ca.sumsqr(x1[N,:]-x1_f) + 0.01*ca.sumsqr(a1)) + shared_cost
-        J2 = 0.5*(ca.sumsqr(x2[N,:]-x2_f) + 0.01*ca.sumsqr(a2)) + shared_cost
+        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + 0.001*ca.sumsqr(a1)) + shared_cost
+        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1]) + 0.001*ca.sumsqr(a2)) + 1e4*ca.sumsqr(Slack)**2 + shared_cost
+
         h_vec = []
         pc_vec = []
         sc_vec = []
@@ -93,6 +103,7 @@ class CollaborativeGame():
         pc2 = []
         for k in range(N):
             pc2.append(self.v2_max**2 - ca.sumsqr(v2[k+1,:]))
+            pc2.append(ca.sumsqr(v2[k+1,:]) - self.v2_min**2 + Slack[k])
             pc2.append(self.a2_max**2 - ca.sumsqr(a2[k,:]))
         pc2 = ca.horzcat(*pc2).T
         lam2 = ca.SX.sym('lam2', pc2.shape[0])
@@ -102,11 +113,11 @@ class CollaborativeGame():
         # Shared Constranints
         sc_vec = []
         for k in range(N):
-            sc_vec.append(self.d_max**2 - ca.sumsqr(x1[k+1,:]-x2[k+1,:])) # d_max**2 - (x1-x2)**2 >=0
-            sc_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2) # (x1-x2)**2 - d_min**2 >=0
+            sc_vec.append(self.d_max**2 - ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - Slack[k]) # d_max**2 - (x1-x2)**2 >=0
+            sc_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2 + Slack[k]) # (x1-x2)**2 - d_min**2 >=0
             if Obstcles is not None:
                 for iObs, Obstcle in enumerate(Obstcles):
-                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/2)))
+                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
                     for factor in factors:
                         sc_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:]-Obstcle['Pos']) - (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
         sc_vec = ca.horzcat(*sc_vec).T
@@ -115,8 +126,8 @@ class CollaborativeGame():
         L1 -= alpha*ca.dot(sig, sc_vec)
         L2 -= (1-alpha)*ca.dot(sig, sc_vec)
 
-        self.Z = ca.vertcat(x1[:], v1[:], a1[:], x2[:], v2[:], a2[:], mu1[:], mu2[:], lam1[:], lam2[:], sig[:])
-        self.Z_len = [[2*N+2, 2*N+2, 2*N], [2*N+2, 2*N+2, 2*N], mu1.shape[0]+mu2.shape[0], pc1.shape[0]+pc2.shape[0], sig.shape[0]]
+        self.Z = ca.vertcat(x1[:], v1[:], a1[:], x2[:], v2[:], a2[:], Slack[:], mu1[:], mu2[:], lam1[:], lam2[:], sig[:])
+        self.Z_len = [[2*N+2, 2*N+2, 2*N], [2*N+2, 2*N+2, 2*N, N], mu1.shape[0]+mu2.shape[0], pc1.shape[0]+pc2.shape[0], sig.shape[0]]
 
         self.indx_x1 = 0
         self.indx_y1 = self.indx_x1 + N+1
@@ -137,7 +148,7 @@ class CollaborativeGame():
         _Cgs = []
 
         _Dxu_L.append( ca.jacobian(L1, ca.vertcat(x1[:], v1[:], a1[:])).T )
-        _Dxu_L.append( ca.jacobian(L2, ca.vertcat(x2[:], v2[:], a2[:])).T )
+        _Dxu_L.append( ca.jacobian(L2, ca.vertcat(x2[:], v2[:], a2[:], Slack[:])).T )
         _Ch = h_vec
         _Cgp = pc_vec
         _Cgs = sc_vec
@@ -155,17 +166,27 @@ class CollaborativeGame():
 
         self.z0 = np.zeros((self.Z.shape[0],))
 
-        self.p_tol = 1e-3
+        self.p_tol = 1e-2
         
         self.nms = 1
 
         self.success = False
+        
+        self.sol = SimpleNamespace()
+        self.sol.time = 0.0
+        self.sol.x1_sol = (self.z0[:2*self.N+2]).reshape(2,-1).T; indx = 2*(self.N+1)
+        self.sol.v1_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.a1_sol = (self.z0[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+        self.sol.x2_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.v2_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.a2_sol = (self.z0[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+        self.sol.Slack = self.z0[indx:indx+self.N]; indx += self.N
 
         self.MPC_guess_human_init()
         self.MPC_guess_robot_init()
 
 
-    def Solve(self, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None):
+    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None):
 
         from julia.api import Julia
         jl = Julia(compiled_modules=False)
@@ -255,8 +276,8 @@ class CollaborativeGame():
                                                convergence_tolerance=tol,
                                                nms="{nms}",
                                                crash_nbchange_limit=3,
-                                               major_iteration_limit=20000,
-                                               minor_iteration_limit=50000,
+                                               major_iteration_limit=10000,
+                                               minor_iteration_limit=10000,
                                                cumulative_iteration_limit=50000,
                                                restart_limit=100)
         success = status == PATHSolver.MCP_Solved
@@ -276,21 +297,23 @@ class CollaborativeGame():
         stat = np.linalg.norm(_f[:n_xu], ord=np.inf)
         feas = max(0, np.amax(_g))
         comp = np.linalg.norm(_g * _l, ord=np.inf)
-        print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e}')
 
         if self.success:
-            self.sol = SimpleNamespace()
+            self.sol.time = time
             self.sol.x1_sol = (z[:2*self.N+2]).reshape(2,-1).T; indx = 2*(self.N+1)
             self.sol.v1_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
             self.sol.a1_sol = (z[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
             self.sol.x2_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
             self.sol.v2_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
             self.sol.a2_sol = (z[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+            self.sol.Slack = z[indx:indx+self.N]; indx += self.N
             # self.sol.mu1_sol = (z[indx:indx+4*(self.N+1)]).reshape(2,-1).T; indx += 4*self.N+4
             # self.sol.mu2_sol = (z[indx:indx+4*(self.N+1)]).reshape(2,-1).T; indx += 4*self.N+4
             # self.sol.lam1_sol = (z[indx:indx+2*self.N]).reshape(1,-1).T; indx += 2*self.N
             # self.sol.lam2_sol = (z[indx:indx+2*self.N]).reshape(1,-1).T; indx += 2*self.N
             # self.sol.sig_sol = (z[indx:]).reshape(2,-1).T
+
+        print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(self.sol.Slack):.4e}')
 
         return
 
@@ -321,7 +344,6 @@ class CollaborativeGame():
 
         opts = {"print_time": 0,  # Print timing, 
                 "ipopt": {
-                "linear_solver": "ma97", "hsllib": "/usr/local/lib/libcoinhsl.so",  # MA97 solver Path to HSL library
                 "mu_strategy": "adaptive",  # "adaptive" or "adaptive" Strategy for updating the barrier parameter
                 "tol": 1e-6,  # Convergence tolerance
                 # "max_iter": 250,  # Max iterations
@@ -349,11 +371,13 @@ class CollaborativeGame():
         x = opti.variable(self.N+1, self.n_dim)
         v = opti.variable(self.N+1, self.n_dim)
         a = opti.variable(self.N, self.n_dim)
+        Slack = opti.variable(self.N)
         x_0, v_0 = opti.parameter(1, self.n_dim), opti.parameter(1, self.n_dim)
         x_tgt = opti.parameter(1, self.n_dim)
         x_partner = opti.parameter(self.N+1, self.n_dim)
 
-        opti.minimize(0.01*ca.sumsqr(a) + ca.sumsqr(x[self.N,:]- x_tgt))
+
+        opti.minimize(0.01*ca.sumsqr(a) + ca.sumsqr(x[self.N,:]- x_tgt) + 1e4**ca.sumsqr(Slack))
         opti.subject_to(x[0,:] == x_0)
         opti.subject_to(v[0,:] == v_0)
         for k in range(self.N):
@@ -365,19 +389,18 @@ class CollaborativeGame():
             # A max
             opti.subject_to(self.a2_max**2 >= ca.sumsqr(a[k,:]))
             # distance constraint:
-            opti.subject_to(self.d_max**2 >= ca.sumsqr(x[k+1,:]-x_partner[k+1,:]))
-            opti.subject_to(self.d_min**2 <= ca.sumsqr(x[k+1,:]-x_partner[k+1,:]))
+            opti.subject_to(self.d_max**2 + Slack[k] >= ca.sumsqr(x[k+1,:]-x_partner[k+1,:]))
+            opti.subject_to(self.d_min**2 - Slack[k] <= ca.sumsqr(x[k+1,:]-x_partner[k+1,:]))
             # Obstcles constraint:
             d = (self.d_max + self.d_min)/2
             for iObs, Obstcle in enumerate(self.Obstcles):
                 opti.subject_to(ca.sumsqr(x[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
                 factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/2)))
                 for factor in factors[1:-1]:
-                    opti.subject_to(ca.sumsqr((1-factor)*x[k+1,:]+factor*x_partner[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
+                    opti.subject_to(ca.sumsqr((1-factor)*x[k+1,:]+factor*x_partner[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2 - Slack[k]) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
 
         opts = {"print_time": 0,  # Print timing, 
                 "ipopt": {
-                "linear_solver": "ma97", "hsllib": "/usr/local/lib/libcoinhsl.so",  # MA97 solver Path to HSL library
                 "mu_strategy": "adaptive",  # "adaptive" or "adaptive" Strategy for updating the barrier parameter
                 "tol": 1e-6,  # Convergence tolerance
                 # "max_iter": 250,  # Max iterations
@@ -419,7 +442,7 @@ class CollaborativeGame():
             plot_sol = False
             sol = self.human_mpc.opti.solve()
         except:
-            plot_sol = True
+            plot_sol = False
 
         x_sol = np.array(self.human_mpc.opti.debug.value(self.human_mpc.x))
         v_sol = np.array(self.human_mpc.opti.debug.value(self.human_mpc.v))
@@ -472,8 +495,8 @@ class CollaborativeGame():
 
         if plot_sol:
             plt.figure()
-            plt.plot(x_sol[:,0], x_sol[:,1], 'b', linewidth=3)
-            plt.plot(x_partner[:,0], x_partner[:,1], 'g', linewidth=3)
+            plt.plot(x_sol[:,0], x_sol[:,1], 'b', linewidth=3, label="robot")
+            plt.plot(x_partner[:,0], x_partner[:,1], 'g', linewidth=3, label="human")
             for k in range(self.N):
                 d_cur = np.linalg.norm(x_sol[k+1,:] - x_partner[k+1,:])
                 if d_cur-0.0001>self.d_max or d_cur+0.0001 < self.d_min:
@@ -501,4 +524,3 @@ class CollaborativeGame():
             plt.pause(0.1)
 
         return x_sol, v_sol, a_sol
-
