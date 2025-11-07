@@ -39,7 +39,7 @@ RT_Plot = True
 hist_col = ['c','m','k','y']
 
 Tf = 10.0
-alpha_vec = [0.05, 0.25, 0.5, 0.95]
+alpha_vec = [0.01, 0.5, 0.99]
 
 N = 10
 dt = 0.1
@@ -59,7 +59,8 @@ Scenarios =[]
 # Scenarios.append({'Name': 'Scenario_4_WithObs', 'x1_init': np.array([[6, -5]]), 'x2_init':np.array([[4, -3]]), 'x1_des': np.array([[7, 5]]), 'theta_des':np.deg2rad(180), 'Obs': Obstcles})
 # Scenarios.append({'Name': 'Scenario_5', 'x1_init': np.array([[5, 2]]), 'x2_init':np.array([[2, 2]]), 'x1_des': np.array([[5, 8]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
-Scenarios.append({'Name': 'Scenario_6_WithObs', 'x1_init': np.array([[3, 0]]), 'x2_init':np.array([[0, 0]]), 'x1_des': np.array([[7, 0]]), 'theta_des':np.deg2rad(30), 'Obs': [{'Pos': np.array([[6,2]]), "diam": 0.5}]})
+# Scenarios.append({'Name': 'Scenario_6_WithObs', 'x1_init': np.array([[3, 0]]), 'x2_init':np.array([[0, 0]]), 'x1_des': np.array([[7, 0]]), 'theta_des':np.deg2rad(60), 'Obs': [{'Pos': np.array([[6,2]]), "diam": 0.5}]})
+Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
 
 for Scenario in Scenarios:
@@ -163,6 +164,7 @@ for Scenario in Scenarios:
         v1_state, v2_state = np.zeros((1,2)), np.zeros((1,2))
         EndSimulation = False
         i_acc = 0
+        GameSol.success = False
         while not EndSimulation:
             # Save The game
 
@@ -202,14 +204,14 @@ for Scenario in Scenarios:
                 z0[GameSol.indx_ay2:GameSol.indx_ay2+N] = a2_guess[:,1]
                     
                 GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
-            
+
             if GameSol.success:
                 i_acc = 0
             else:
                 i_acc += 1
 
             # Dynamics
-            a1_cmd = LimitedCmd(GameSol.sol.a1_sol[i_acc,:] + np.random.normal(0.0, 1.0, 2), GameSol.a1_max)
+            a1_cmd = LimitedCmd(GameSol.sol.a1_sol[i_acc,:] + 0*np.random.normal(0.0, 1.0, 2), GameSol.a1_max)
             a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc,:], GameSol.a2_max)
             x1_state = x1_state + dt * v1_state + 0.5*dt**2*a1_cmd
             v1_state = v1_state + dt * a1_cmd
@@ -241,7 +243,7 @@ for Scenario in Scenarios:
                 p2_hist.set_data(x2_hist[:,0], x2_hist[:,1])
                 tgt1_plot.set_data([x1_des[0,0]], [x1_des[0,1]])
                 tgt2_plot.set_data([x2_des[0,0]], [x2_des[0,1]])
-                ax_xy.set_title(f'Alpha is {alpha}')
+                ax_xy.set_title(f'Alpha is {alpha}, Time: {t:2.2}[Sec]')
                 ax_xy.legend()
                 
                 t_pred = np.linspace(t-dt, t-dt+N*dt, N+1)

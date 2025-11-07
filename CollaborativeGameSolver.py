@@ -21,7 +21,7 @@ To use this solver, install the prerequisites using the following steps
 
 
 class CollaborativeGame():
-    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.1, Obstcles: list = None, verbose: int = 0):
+    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.05, Obstcles: list = None, verbose: int = 0):
         self.N = N
         self.dt = dt
         self.verbose = verbose
@@ -29,17 +29,15 @@ class CollaborativeGame():
         self.n_dim = 2
 
         self.d_min, self.d_max = d-delta_d, d+delta_d
-        self.v1_max = 1.0
-        self.v1_min = 0.25
+        self.v1_max = 1.5
         self.a1_max = 5.0
         self.v2_max = 3.0
-        self.v2_min = 0.5
-        self.a2_max = 20.0
+        self.a2_max = 25.0
 
-        if self.v1_max < self.v1_min:
-            raise ValueError(f"Expected v1_max >= v1_min, received v1_max={self.v1_max} and v1_min={self.v1_min}")
-        if self.v2_max < self.v2_min:
-            raise ValueError(f"Expected v2_max >= v2_min, received v2_max={self.v2_max} and v2_min={self.v2_min}")
+        # if self.v1_max < self.v1_min:
+        #     raise ValueError(f"Expected v1_max >= v1_min, received v1_max={self.v1_max} and v1_min={self.v1_min}")
+        # if self.v2_max < self.v2_min:
+        #     raise ValueError(f"Expected v2_max >= v2_min, received v2_max={self.v2_max} and v2_min={self.v2_min}")
 
 
         # Define the states and controls
@@ -53,8 +51,8 @@ class CollaborativeGame():
         Slack = ca.SX.sym('Slack', N)
 
         shared_cost = 0.0
-        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + 0.001*ca.sumsqr(a1)) + shared_cost
-        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1]) + 0.001*ca.sumsqr(a2)) + 1e4*ca.sumsqr(Slack)**2 + shared_cost
+        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + 0.001*ca.sumsqr(a1) + 0.001*ca.sumsqr(a2)) + shared_cost
+        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1]) + 0.001*ca.sumsqr(a1) + 0.001*ca.sumsqr(a2)) + 1e4*ca.sumsqr(Slack)**2 + shared_cost
 
         h_vec = []
         pc_vec = []
@@ -103,7 +101,6 @@ class CollaborativeGame():
         pc2 = []
         for k in range(N):
             pc2.append(self.v2_max**2 - ca.sumsqr(v2[k+1,:]))
-            pc2.append(ca.sumsqr(v2[k+1,:]) - self.v2_min**2 + Slack[k])
             pc2.append(self.a2_max**2 - ca.sumsqr(a2[k,:]))
         pc2 = ca.horzcat(*pc2).T
         lam2 = ca.SX.sym('lam2', pc2.shape[0])
@@ -113,8 +110,8 @@ class CollaborativeGame():
         # Shared Constranints
         sc_vec = []
         for k in range(N):
-            sc_vec.append(self.d_max**2 - ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - Slack[k]) # d_max**2 - (x1-x2)**2 >=0
-            sc_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2 + Slack[k]) # (x1-x2)**2 - d_min**2 >=0
+            sc_vec.append(self.d_max**2 - ca.sumsqr(x1[k+1,:]-x2[k+1,:]) + Slack[k]) # d_max**2 - (x1-x2)**2 >=0
+            sc_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2 - Slack[k]) # (x1-x2)**2 - d_min**2 >=0
             if Obstcles is not None:
                 for iObs, Obstcle in enumerate(Obstcles):
                     factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
@@ -377,7 +374,7 @@ class CollaborativeGame():
         x_partner = opti.parameter(self.N+1, self.n_dim)
 
 
-        opti.minimize(0.01*ca.sumsqr(a) + ca.sumsqr(x[self.N,:]- x_tgt) + 1e4**ca.sumsqr(Slack))
+        opti.minimize(0.001*ca.sumsqr(a) + 0.01*ca.sumsqr(v) + ca.sumsqr(x[self.N,:]- x_tgt) + 1e6**ca.sumsqr(Slack))
         opti.subject_to(x[0,:] == x_0)
         opti.subject_to(v[0,:] == v_0)
         for k in range(self.N):
@@ -394,10 +391,9 @@ class CollaborativeGame():
             # Obstcles constraint:
             d = (self.d_max + self.d_min)/2
             for iObs, Obstcle in enumerate(self.Obstcles):
-                opti.subject_to(ca.sumsqr(x[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
-                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/2)))
-                for factor in factors[1:-1]:
-                    opti.subject_to(ca.sumsqr((1-factor)*x[k+1,:]+factor*x_partner[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2 - Slack[k]) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
+                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
+                for factor in factors[:-1]:
+                    opti.subject_to(ca.sumsqr((1-factor)*x[k+1,:]+factor*x_partner[k+1,:]-Obstcle['Pos']) >= (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
 
         opts = {"print_time": 0,  # Print timing, 
                 "ipopt": {
@@ -416,6 +412,7 @@ class CollaborativeGame():
         self.robot_mpc.x = x
         self.robot_mpc.v = v
         self.robot_mpc.a = a
+        self.robot_mpc.Slack = Slack
         self.robot_mpc.x_0 = x_0
         self.robot_mpc.v_0 = v_0
         self.robot_mpc.x_partner = x_partner
@@ -473,11 +470,12 @@ class CollaborativeGame():
         self.robot_mpc.opti.set_value(self.robot_mpc.x_tgt, x_tgt)
 
 
-        x_guess, v_guess, a_guess = x_0, v_0, np.array([[0.0001, 0.0001]])
+        x_guess, v_guess = x_0, v_0
         for k in range(self.N+1):
             self.robot_mpc.opti.set_initial(self.robot_mpc.x[k,:], x_guess)
             self.robot_mpc.opti.set_initial(self.robot_mpc.v[k,:], v_guess)
             if k<self.N:
+                a_guess = -0.5*v_guess
                 self.robot_mpc.opti.set_initial(self.robot_mpc.a[k,:], a_guess)
             
             x_guess = x_guess + self.dt*v_guess + 0.5*a_guess*self.dt**2
@@ -487,11 +485,12 @@ class CollaborativeGame():
             plot_sol = False
             sol = self.robot_mpc.opti.solve()
         except:
-            plot_sol = 0
+            plot_sol = False
 
         x_sol = np.array(self.robot_mpc.opti.debug.value(self.robot_mpc.x))
         v_sol = np.array(self.robot_mpc.opti.debug.value(self.robot_mpc.v))
         a_sol = np.array(self.robot_mpc.opti.debug.value(self.robot_mpc.a))
+        Slack_sol = np.array(self.robot_mpc.opti.debug.value(self.robot_mpc.Slack))
 
         if plot_sol:
             plt.figure()
@@ -499,20 +498,20 @@ class CollaborativeGame():
             plt.plot(x_partner[:,0], x_partner[:,1], 'g', linewidth=3, label="human")
             for k in range(self.N):
                 d_cur = np.linalg.norm(x_sol[k+1,:] - x_partner[k+1,:])
-                if d_cur-0.0001>self.d_max or d_cur+0.0001 < self.d_min:
+                if d_cur-0.01>self.d_max or d_cur+0.01 < self.d_min:
                     plt.plot([x_sol[k+1,0], x_partner[k+1,0]], [x_sol[k+1,1], x_partner[k+1,1]], 'k:', linewidth=2)
 
-            if self.Obstcles is not None:
-                d = (self.d_max + self.d_min)/2
-                for iObs, Obstcle in enumerate(self.Obstcles):
-                    x, y = Obstcle['diam']/2*np.cos(np.linspace(0,2*np.pi,100)), Obstcle['diam']/2*np.sin(np.linspace(0,2*np.pi,100))
-                    plt.plot(Obstcle['Pos'][0,0]+x, Obstcle['Pos'][0,1]+y, 'k', linewidth=3)
-                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/2)))
-                    for factor in factors[1:-1]:
-                        x_cur = factor*x_sol[k+1,:]+(1-factor)*x_partner[k+1,:]
-                        d_cur = np.linalg.norm(x_cur - Obstcle['Pos'])
-                        if d_cur+0.0001 < Obstcle['diam']/2:
-                            plt.plot(x_cur[0],x_cur[1],'r*')
+                if self.Obstcles is not None:
+                    d = (self.d_max + self.d_min)/2
+                    for iObs, Obstcle in enumerate(self.Obstcles):
+                        x, y = Obstcle['diam']/2*np.cos(np.linspace(0,2*np.pi,100)), Obstcle['diam']/2*np.sin(np.linspace(0,2*np.pi,100))
+                        plt.plot(Obstcle['Pos'][0,0]+x, Obstcle['Pos'][0,1]+y, 'k', linewidth=3)
+                        factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
+                        for factor in factors[1:-1]:
+                            x_cur = factor*x_sol[k+1,:]+(1-factor)*x_partner[k+1,:]
+                            d_cur = np.linalg.norm(x_cur - Obstcle['Pos'])
+                            if d_cur+0.0001 < Obstcle['diam']/2:
+                                plt.plot(x_cur[0],x_cur[1],'r*')
                         
 
             plt.xlim([0,10])
