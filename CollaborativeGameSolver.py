@@ -49,10 +49,13 @@ class CollaborativeGame():
         x1_f, x2_f = ca.SX.sym('x1_f', 1, 2), ca.SX.sym('x2_f', 1, 2)
         alpha = ca.SX.sym('alpha')
         Slack = ca.SX.sym('Slack', N)
+        avoid_Obs = ca.SX.sym('avoid_Obs',1)
 
-        shared_cost = 0.0
-        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + 0.001*ca.sumsqr(a1) + 0.001*ca.sumsqr(a2)) + shared_cost
-        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1]) + 0.001*ca.sumsqr(a1) + 0.001*ca.sumsqr(a2)) + 1e4*ca.sumsqr(Slack)**2 + shared_cost
+        shared_cost = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1]) + 0.01*ca.sumsqr(a1) + 0.01*ca.sumsqr(a2))
+        J1 = shared_cost
+        J2 = 1e4*ca.sumsqr(Slack)**2 + shared_cost
+        for iObs in range(len(Obstcles) if Obstcles is not None else 0):
+            J2 += -0.5*avoid_Obs*ca.sumsqr(x2[N,:]- Obstcles[iObs]['Pos'] )
 
         h_vec = []
         pc_vec = []
@@ -152,9 +155,9 @@ class CollaborativeGame():
 
         # Define the F and J functions
         F = ca.vertcat(*_Dxu_L, *_Ch, *_Cgp, _Cgs)
-        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha], [F])
+        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, avoid_Obs], [F])
         J = ca.jacobian(F, self.Z)
-        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha], [J])
+        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, avoid_Obs], [J])
 
         self.n_l_inf = 0
         self.n_l_inf += np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
@@ -183,7 +186,7 @@ class CollaborativeGame():
         self.MPC_guess_robot_init()
 
 
-    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None):
+    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None, avoid_Obs = 0.0):
 
         from julia.api import Julia
         jl = Julia(compiled_modules=False)
@@ -202,8 +205,8 @@ class CollaborativeGame():
         # Main.nnz = self.J.sparsity_out(0).nnz()
         Main.nnz = self.fun_J.numel_out(0)
 
-        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha)).squeeze()
-        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha))
+        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, avoid_Obs)).squeeze()
+        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, avoid_Obs))
 
         Main.tol = self.p_tol
 
@@ -287,7 +290,7 @@ class CollaborativeGame():
         if self.success:
             self.z0 = z
 
-        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha)).squeeze()
+        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, avoid_Obs)).squeeze()
         n_xu = np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
         _g = -_f[n_xu:]
         _l = z[n_xu:]
@@ -462,7 +465,7 @@ class CollaborativeGame():
         return x_sol, v_sol, a_sol
 
 
-    def MPC_guess_robot_calc(self, x_0, v_0, x_tgt, x_partner = None):
+    def MPC_guess_robot_calc(self, x_0, v_0, x_tgt, x_partner = None, reverse_init = False):
 
         self.robot_mpc.opti.set_value(self.robot_mpc.x_0, x_0)
         self.robot_mpc.opti.set_value(self.robot_mpc.v_0, v_0)
@@ -474,12 +477,22 @@ class CollaborativeGame():
         for k in range(self.N+1):
             self.robot_mpc.opti.set_initial(self.robot_mpc.x[k,:], x_guess)
             self.robot_mpc.opti.set_initial(self.robot_mpc.v[k,:], v_guess)
-            if k<self.N:
-                a_guess = -0.5*v_guess
-                self.robot_mpc.opti.set_initial(self.robot_mpc.a[k,:], a_guess)
             
-            x_guess = x_guess + self.dt*v_guess + 0.5*a_guess*self.dt**2
-            v_guess = v_guess + self.dt*a_guess
+            if k<self.N: 
+                if reverse_init == False:
+                    a_guess = -0.5*v_guess
+                    self.robot_mpc.opti.set_initial(self.robot_mpc.a[k,:], a_guess)
+                    x_guess = x_guess + self.dt*v_guess + 0.5*a_guess*self.dt**2
+                    v_guess = v_guess + self.dt*a_guess
+                else:
+                    x_prev = x_guess
+                    v_prev = v_guess
+                    if k==0:
+                        theta = np.atan2(x_0[0,1]-x_partner[0,1], x_0[0,0]-x_partner[0,0])
+                        theta_vec = np.linspace(theta, theta+np.pi, self.N+1)
+                    x_guess = x_partner[k] + 0.5*(self.d_min+self.d_max)*np.array([np.cos(theta_vec[k]), np.sin(theta_vec[k])]).T
+                    v_guess = (x_guess - x_prev)/self.dt
+                    a_guess = (v_guess - v_prev)/self.dt
 
         try:
             plot_sol = False

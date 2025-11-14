@@ -1,17 +1,17 @@
 // .vscode/launch.json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "CollaborativeGame (ROS)",
-      "type": "python",
-      "request": "launch",
-      "program": "/ws/HRC_Simulation/CollaborativeGameRealtime.py",
-      // "program": "/ws/HRC_Simulation/sim_mocap.py",
-      // "program": "/ws/HRC_Simulation/sim_ridgeback.py",
-      "console": "integratedTerminal",   // <- important
-      "justMyCode": false,
-      "args": ["--human","Human","--robot","Ridgeback_base"]
-    }
-  ]
-}
+// {
+//   "version": "0.2.0",
+//   "configurations": [
+//     {
+//       "name": "CollaborativeGame (ROS)",
+//       "type": "python",
+//       "request": "launch",
+//       "program": "/ws/HRC_Simulation/CollaborativeGameRealtime.py",
+//       // "program": "/ws/HRC_Simulation/sim_mocap.py",
+//       // "program": "/ws/HRC_Simulation/sim_ridgeback.py",
+//       "console": "integratedTerminal",   // <- important
+//       "justMyCode": false,
+//       "args": ["--human","Human","--robot","Ridgeback_base"]
+//     }
+//   ]
+// }

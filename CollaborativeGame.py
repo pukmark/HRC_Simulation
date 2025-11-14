@@ -165,6 +165,8 @@ for Scenario in Scenarios:
         EndSimulation = False
         i_acc = 0
         GameSol.success = False
+        reverse_init = False
+        avoid_Obs = 0.0
         while not EndSimulation:
             # Save The game
 
@@ -183,11 +185,12 @@ for Scenario in Scenarios:
                 z0[GameSol.indx_ax2:GameSol.indx_ax2+N-1] = GameSol.sol.a2_sol[1:,0]
                 z0[GameSol.indx_ay2:GameSol.indx_ay2+N-1] = GameSol.sol.a2_sol[1:,1]
 
-                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs)
             if not GameSol.success:
                 # calculate mpc initial guess for human:
                 x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
-                x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner = x1_guess)
+                x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner = x1_guess, reverse_init = reverse_init)
+                reverse_init = False
 
                 z0 = np.zeros_like(GameSol.z0)
                 z0[GameSol.indx_x1:GameSol.indx_x1+N+1] = x1_guess[:,0]
@@ -203,7 +206,7 @@ for Scenario in Scenarios:
                 z0[GameSol.indx_ax2:GameSol.indx_ax2+N] = a2_guess[:,0]
                 z0[GameSol.indx_ay2:GameSol.indx_ay2+N] = a2_guess[:,1]
                     
-                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs)
 
             if GameSol.success:
                 i_acc = 0
@@ -274,6 +277,12 @@ for Scenario in Scenarios:
                 print("Current State: x1:", x1_state, "x2_state:", x2_state)
 
             # Check if to End Simulation
+            if np.linalg.norm(GameSol.sol.v2_sol[-1,:])<0.5 and np.linalg.norm(GameSol.sol.x2_sol[-1,:] - x2_des)>0.5 :
+                if avoid_Obs < 0.5:
+                    avoid_Obs = 1.0
+                else:
+                    avoid_Obs = 0.0
+                GameSol.success = False
             if t >= Tf or ( np.linalg.norm(x1_state - x1_des)<0.2 and np.linalg.norm(x2_state - x2_des)<0.2):
                 EndSimulation = True
                 if RT_Plot:

@@ -15,3 +15,14 @@ plots/
 # Virtual environment
 venv/
 env/
+
+barc_launch/
+mpclab_common/
+mpclab_controllers/
+mpclab_simulators/
+mpclab_visualizers/
+nonplanar_vehicle_navigation/
+mpclab_estimation/
+mpclab_simulation/
+
+__pycache__/
