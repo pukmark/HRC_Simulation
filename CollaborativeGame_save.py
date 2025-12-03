@@ -332,8 +332,8 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
             a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
         else:
             a1_cmd = GameSol.sol.a1_sol[i_acc, :]
-        if n_mc > 1:
-            a1_cmd += 2.0 * np.random.normal(0.0, 1.0, 2)
+        if n_mc > 0:
+            a1_cmd += 1.0 * np.random.normal(0.0, 1.0, 2)
         
         a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
         a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc, :], GameSol.a2_max)
