@@ -265,6 +265,7 @@ def run_scenario(Scenario: Scenario):
             x1_state, x2_state = x1_init, x2_init
             v1_state, v2_state = np.zeros((1, 2)), np.zeros((1, 2))
             EndSimulation = False
+            infeasible_run = False
             i_acc = 0
             GameSol.success = False
             reverse_init = False
@@ -355,6 +356,11 @@ def run_scenario(Scenario: Scenario):
                 a2_hist = np.vstack((a2_hist, a2_cmd))
                 t_hist = np.vstack((t_hist, t))
 
+                if np.linalg.norm(x2_state - x1_state) > GameSol.d + 10 * GameSol.delta_d:
+                    infeasible_run = True
+                    EndSimulation = True
+                    print("Terminating MC run due to excessive separation.")
+
                 if RT_Plot:
                     p1_plot.set_data([x1_state[0, 0]], [x1_state[0, 1]])
                     p2_plot.set_data([x2_state[0, 0]], [x2_state[0, 1]])
@@ -418,7 +424,7 @@ def run_scenario(Scenario: Scenario):
                 #     avoid_Obs = 0.0
                 #     GameSol.success = False
                 # if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05) or (np.linalg.norm(x1_state - x2_state) > GameSol.d + 10*GameSol.delta_d):
-                if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05):
+                if EndSimulation or (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05):
                     EndSimulation = True
                     for i in range(len(p12_line_pred)):
                         p12_line_pred[i].set_data([], [])
@@ -446,19 +452,35 @@ def run_scenario(Scenario: Scenario):
             a1_mag = np.linalg.norm(a1_hist, axis=1)  # magnitude gives total acceleration per step
             a2_mag = np.linalg.norm(a2_hist, axis=1)
             scenario_time = t_hist[-1, 0]
+            if infeasible_run:
+                dist_mean = -1.0
+                dist_std = -1.0
+                a1_mean = -1.0
+                a1_std = -1.0
+                a2_mean = -1.0
+                a2_std = -1.0
+                time_std = -1.0
+            else:
+                dist_mean = dist_series.mean()
+                dist_std = dist_series.std()
+                a1_mean = a1_mag.mean()
+                a1_std = a1_mag.std()
+                a2_mean = a2_mag.mean()
+                a2_std = a2_mag.std()
+                time_std = np.std([scenario_time])
             mc_run_stats.append(
                 np.array(
                     [
                         alpha,
                         n_mc + 1,
-                        dist_series.mean(),
-                        dist_series.std(),
-                        a1_mag.mean(),
-                        a1_mag.std(),
-                        a2_mag.mean(),
-                        a2_mag.std(),
+                        dist_mean,
+                        dist_std,
+                        a1_mean,
+                        a1_std,
+                        a2_mean,
+                        a2_std,
                         scenario_time,
-                        np.std([scenario_time]),
+                        time_std,
                     ],
                     dtype=float,
                 )
