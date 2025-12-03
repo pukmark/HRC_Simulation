@@ -514,7 +514,6 @@ def run_scenario(Scenario: Scenario):
                 "mc_run",
                 "distance_mean",
                 "distance_std",
-                "distance_min",
                 "distance_max",
                 "a1_acc_mean",
                 "a1_acc_std",

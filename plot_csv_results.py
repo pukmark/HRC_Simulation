@@ -3,8 +3,8 @@
 Quick utility to visualize Monte-Carlo statistics saved by CollaborativeGame.
 
 By default it reads `Scenario_1_mc_stats.csv` and produces a PNG with
-error-bar plots for distance, acceleration, and scenario duration grouped
-by the `alpha` column in the CSV.
+error-bar plots for distance (with optional min/max bands), acceleration,
+and scenario duration grouped by the `alpha` column in the CSV.
 """
 from __future__ import annotations
 
@@ -31,7 +31,8 @@ def _iter_alphas(data: np.ndarray) -> Iterable[Tuple[float, np.ndarray]]:
 
 
 def _has_distance_range(data: np.ndarray) -> bool:
-    return {"distance_min", "distance_max"}.issubset(set(data.dtype.names))
+    names = set(data.dtype.names or [])
+    return {"distance_max"}.issubset(names)
 
 
 def _filter_valid_rows(data: np.ndarray) -> Tuple[np.ndarray, int]:
@@ -43,7 +44,6 @@ def _filter_valid_rows(data: np.ndarray) -> Tuple[np.ndarray, int]:
     valid_mask = (
         (data["distance_mean"] >= 0)
         & (data["distance_std"] >= 0)
-        & ((data["distance_min"] >= 0) if has_dist_range else True)
         & ((data["distance_max"] >= 0) if has_dist_range else True)
         & (data["a1_acc_mean"] >= 0)
         & (data["a1_acc_std"] >= 0)
@@ -80,6 +80,7 @@ def summarize_by_alpha(data: np.ndarray):
     Compute simple means across MC runs for each alpha.
     """
     summaries = []
+    has_range = _has_distance_range(data)
     for alpha, grp in _iter_alphas(data):
         summaries.append(
             {
@@ -87,16 +88,28 @@ def summarize_by_alpha(data: np.ndarray):
                 "n": len(grp),
                 "distance_mean": float(np.mean(grp["distance_mean"])),
                 "distance_std": float(np.mean(grp["distance_std"])),
-                "distance_min": float(np.mean(grp["distance_min"])) if "distance_min" in grp.dtype.names else None,
-                "distance_max": float(np.mean(grp["distance_max"])) if "distance_max" in grp.dtype.names else None,
+                "distance_max": float(np.mean(grp["distance_max"])) if has_range else None,
                 "a1_acc_mean": float(np.mean(grp["a1_acc_mean"])),
                 "a1_acc_std": float(np.mean(grp["a1_acc_std"])),
                 "a2_acc_mean": float(np.mean(grp["a2_acc_mean"])),
                 "a2_acc_std": float(np.mean(grp["a2_acc_std"])),
                 "scenario_time": float(np.mean(grp["scenario_time"])),
+                "scenario_time_std": float(np.mean(grp["scenario_time_std"])),
             }
         )
     return summaries
+
+
+def mean_max_distance_by_alpha(data: np.ndarray):
+    """
+    Return list of dicts with mean of the maximum distance per alpha.
+    """
+    if not _has_distance_range(data):
+        return []
+    results = []
+    for alpha, grp in _iter_alphas(data):
+        results.append({"alpha": float(alpha), "dist_max_mean": float(np.mean(grp["distance_max"]))})
+    return results
 
 
 def _plot_metric(ax, alpha_groups, mean_key: str, std_key: str, ylabel: str):
@@ -122,7 +135,7 @@ def _plot_distance(ax, alpha_groups, has_range: bool):
     for color, (alpha, grp) in zip(colors, alpha_groups):
         mc = grp["mc_run"]
         if has_range:
-            ax.fill_between(mc, grp["distance_min"], grp["distance_max"], color=color, alpha=0.15)
+            ax.fill_between(mc, grp["distance_max"], color=color, alpha=0.15)
         ax.errorbar(
             mc,
             grp["distance_mean"],
@@ -195,11 +208,7 @@ def main():
         type=Path,
         help="Where to save the plot (defaults to <csv>.png next to the CSV).",
     )
-    parser.add_argument(
-        "--show",
-        action="store_true",
-        help="Display the interactive window in addition to saving.",
-    )
+    parser.add_argument("--show", default=True, help="Display the interactive window in addition to saving.")
     args = parser.parse_args()
 
     data_raw = _load_csv(args.csv)
@@ -217,6 +226,16 @@ def main():
             f"({fs['pct_failed']:.1f}%)"
         )
 
+    has_range = _has_distance_range(data)
+    if not has_range:
+        print("No distance_min/distance_max columns found; plotting distance mean/std only.")
+
+    dist_max_stats = mean_max_distance_by_alpha(data)
+    if dist_max_stats:
+        print("Mean max distance per alpha:")
+        for item in dist_max_stats:
+            print(f"  alpha={item['alpha']:.3f}: dist_max_mean={item['dist_max_mean']:.3f}")
+
     print("MC means per alpha:")
     for summary in summarize_by_alpha(data):
         parts = [
@@ -231,8 +250,11 @@ def main():
         parts.extend(
             [
                 f"a1_acc_mean={summary['a1_acc_mean']:.3f}",
+                f"a1_acc_std_mean={summary['a1_acc_std']:.3f}",
                 f"a2_acc_mean={summary['a2_acc_mean']:.3f}",
+                f"a2_acc_std_mean={summary['a2_acc_std']:.3f}",
                 f"scenario_time={summary['scenario_time']:.3f}",
+                f"scenario_time_std_mean={summary['scenario_time_std']:.3f}",
             ]
         )
         print(" ".join(parts))
