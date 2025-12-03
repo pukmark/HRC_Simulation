@@ -9,6 +9,7 @@ by the `alpha` column in the CSV.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Iterable, Tuple
 
@@ -27,6 +28,43 @@ def _iter_alphas(data: np.ndarray) -> Iterable[Tuple[float, np.ndarray]]:
     for alpha in np.unique(data["alpha"]):
         mask = data["alpha"] == alpha
         yield alpha, np.sort(data[mask], order="mc_run")
+
+def _filter_valid_rows(data: np.ndarray) -> Tuple[np.ndarray, int]:
+    """
+    Drop rows where metrics were marked invalid (-1 sentinel).
+    Returns (filtered_data, num_dropped).
+    """
+    valid_mask = (
+        (data["distance_mean"] >= 0)
+        & (data["distance_std"] >= 0)
+        & (data["a1_acc_mean"] >= 0)
+        & (data["a1_acc_std"] >= 0)
+        & (data["a2_acc_mean"] >= 0)
+        & (data["a2_acc_std"] >= 0)
+        & (data["scenario_time_std"] >= 0)
+    )
+    filtered = data[valid_mask]
+    return filtered, int((~valid_mask).sum())
+
+def _failure_stats_by_alpha(raw: np.ndarray, filtered: np.ndarray):
+    """
+    Compute failure counts/percentages per alpha using raw vs. filtered data.
+    """
+    stats = []
+    for alpha in np.unique(raw["alpha"]):
+        total = int((raw["alpha"] == alpha).sum())
+        valid = int((filtered["alpha"] == alpha).sum()) if filtered.size else 0
+        failed = total - valid
+        pct_failed = 0.0 if total == 0 else 100.0 * failed / total
+        stats.append(
+            {
+                "alpha": float(alpha),
+                "total": total,
+                "failed": failed,
+                "pct_failed": pct_failed,
+            }
+        )
+    return stats
 
 
 def summarize_by_alpha(data: np.ndarray):
@@ -69,8 +107,7 @@ def _plot_metric(ax, alpha_groups, mean_key: str, std_key: str, ylabel: str):
     ax.legend()
 
 
-def plot_results(csv_path: Path, output: Path | None = None, show: bool = False) -> Path:
-    data = _load_csv(csv_path)
+def plot_results(data: np.ndarray, csv_path: Path, output: Path | None = None, show: bool = False) -> Path:
     alpha_groups = list(_iter_alphas(data))
     if not alpha_groups:
         raise ValueError(f"No rows found in {csv_path}")
@@ -112,6 +149,7 @@ def plot_results(csv_path: Path, output: Path | None = None, show: bool = False)
 
 
 def main():
+    os.system("clear")
     parser = argparse.ArgumentParser(description="Plot results from *_mc_stats.csv.")
     parser.add_argument(
         "--csv",
@@ -131,7 +169,21 @@ def main():
     )
     args = parser.parse_args()
 
-    data = _load_csv(args.csv)
+    data_raw = _load_csv(args.csv)
+    data, dropped = _filter_valid_rows(data_raw)
+    if dropped:
+        print(f"Ignoring {dropped} infeasible run(s) marked with -1 stats.")
+    if data.size == 0:
+        raise SystemExit("No valid rows remain after filtering infeasible runs.")
+
+    fail_stats = _failure_stats_by_alpha(data_raw, data)
+    print("Failed run percentage per alpha:")
+    for fs in fail_stats:
+        print(
+            f"  alpha={fs['alpha']:.3f}: failed {fs['failed']}/{fs['total']} "
+            f"({fs['pct_failed']:.1f}%)"
+        )
+
     print("MC means per alpha:")
     for summary in summarize_by_alpha(data):
         print(
@@ -144,7 +196,7 @@ def main():
             f"scenario_time={summary['scenario_time']:.3f}"
         )
 
-    output_path = plot_results(args.csv, output=args.out, show=args.show)
+    output_path = plot_results(data, args.csv, output=args.out, show=args.show)
     print(f"Saved plot to {output_path}")
 
 
