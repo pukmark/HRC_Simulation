@@ -438,6 +438,8 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
     if infeasible_run:
         dist_mean = -1.0
         dist_std = -1.0
+        dist_min = -1.0
+        dist_max = -1.0
         a1_mean = -1.0
         a1_std = -1.0
         a2_mean = -1.0
@@ -446,6 +448,8 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
     else:
         dist_mean = dist_series.mean()
         dist_std = dist_series.std()
+        dist_min = dist_series.min()
+        dist_max = dist_series.max()
         a1_mean = a1_mag.mean()
         a1_std = a1_mag.std()
         a2_mean = a2_mag.mean()
@@ -457,6 +461,8 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
             n_mc + 1,
             dist_mean,
             dist_std,
+            dist_min,
+            dist_max,
             a1_mean,
             a1_std,
             a2_mean,
@@ -511,6 +517,8 @@ def run_scenario(Scenario: Scenario):
                 "mc_run",
                 "distance_mean",
                 "distance_std",
+                "distance_min",
+                "distance_max",
                 "a1_acc_mean",
                 "a1_acc_std",
                 "a2_acc_mean",
