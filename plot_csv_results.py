@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+Quick utility to visualize Monte-Carlo statistics saved by CollaborativeGame.
+
+By default it reads `Scenario_1_mc_stats.csv` and produces a PNG with
+error-bar plots for distance, acceleration, and scenario duration grouped
+by the `alpha` column in the CSV.
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Iterable, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+def _load_csv(csv_path: Path) -> np.ndarray:
+    data = np.genfromtxt(csv_path, delimiter=",", names=True)
+    if data.ndim == 0:
+        data = data.reshape(1)  # keep shapes consistent when file has one row
+    return data
+
+
+def _iter_alphas(data: np.ndarray) -> Iterable[Tuple[float, np.ndarray]]:
+    for alpha in np.unique(data["alpha"]):
+        mask = data["alpha"] == alpha
+        yield alpha, np.sort(data[mask], order="mc_run")
+
+
+def summarize_by_alpha(data: np.ndarray):
+    """
+    Compute simple means across MC runs for each alpha.
+    """
+    summaries = []
+    for alpha, grp in _iter_alphas(data):
+        summaries.append(
+            {
+                "alpha": alpha,
+                "n": len(grp),
+                "distance_mean": float(np.mean(grp["distance_mean"])),
+                "distance_std": float(np.mean(grp["distance_std"])),
+                "a1_acc_mean": float(np.mean(grp["a1_acc_mean"])),
+                "a1_acc_std": float(np.mean(grp["a1_acc_std"])),
+                "a2_acc_mean": float(np.mean(grp["a2_acc_mean"])),
+                "a2_acc_std": float(np.mean(grp["a2_acc_std"])),
+                "scenario_time": float(np.mean(grp["scenario_time"])),
+            }
+        )
+    return summaries
+
+
+def _plot_metric(ax, alpha_groups, mean_key: str, std_key: str, ylabel: str):
+    colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(alpha_groups)))
+    for color, (alpha, grp) in zip(colors, alpha_groups):
+        ax.errorbar(
+            grp["mc_run"],
+            grp[mean_key],
+            yerr=grp[std_key],
+            fmt="o-",
+            capsize=3,
+            label=f"alpha={alpha:.2f}",
+            color=color,
+        )
+    ax.set_xlabel("MC run")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+
+def plot_results(csv_path: Path, output: Path | None = None, show: bool = False) -> Path:
+    data = _load_csv(csv_path)
+    alpha_groups = list(_iter_alphas(data))
+    if not alpha_groups:
+        raise ValueError(f"No rows found in {csv_path}")
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
+    fig.suptitle(f"Stats from {csv_path.name}")
+
+    _plot_metric(axes[0], alpha_groups, "distance_mean", "distance_std", "Distance [m]")
+    _plot_metric(axes[1], alpha_groups, "a1_acc_mean", "a1_acc_std", "Human accel [m/s^2]")
+
+    # Overlay robot accel on a second y-axis for clarity.
+    ax2 = axes[1].twinx()
+    colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(alpha_groups)))
+    for color, (alpha, grp) in zip(colors, alpha_groups):
+        ax2.errorbar(
+            grp["mc_run"],
+            grp["a2_acc_mean"],
+            yerr=grp["a2_acc_std"],
+            fmt="s--",
+            capsize=3,
+            label=f"robot alpha={alpha:.2f}",
+            color=color,
+        )
+    ax2.set_ylabel("Robot accel [m/s^2]")
+    ax2.grid(False)
+    ax2.legend(loc="lower right")
+
+    _plot_metric(axes[2], alpha_groups, "scenario_time", "scenario_time_std", "Scenario time [s]")
+
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.82)
+
+    output_path = output or csv_path.with_suffix(".png")
+    fig.savefig(output_path, dpi=200)
+    if show:
+        plt.show()
+    plt.close(fig)
+    return output_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Plot results from *_mc_stats.csv.")
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("Scenario_1_mc_stats.csv"),
+        help="Path to the mc_stats CSV produced by CollaborativeGame.",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Where to save the plot (defaults to <csv>.png next to the CSV).",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Display the interactive window in addition to saving.",
+    )
+    args = parser.parse_args()
+
+    data = _load_csv(args.csv)
+    print("MC means per alpha:")
+    for summary in summarize_by_alpha(data):
+        print(
+            f"alpha={summary['alpha']:.3f} "
+            f"(n={summary['n']}): "
+            f"dist_mean={summary['distance_mean']:.3f}, "
+            f"dist_std_mean={summary['distance_std']:.3f}, "
+            f"a1_acc_mean={summary['a1_acc_mean']:.3f}, "
+            f"a2_acc_mean={summary['a2_acc_mean']:.3f}, "
+            f"scenario_time={summary['scenario_time']:.3f}"
+        )
+
+    output_path = plot_results(args.csv, output=args.out, show=args.show)
+    print(f"Saved plot to {output_path}")
+
+
+if __name__ == "__main__":
+    main()

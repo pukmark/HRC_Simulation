@@ -17,7 +17,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Tuple
 
-np.random.seed(100)
+
 
 @dataclass
 class Scenario:
@@ -120,7 +120,7 @@ RT_Plot = True
 
 hist_col = ['c','m','k','y']
 
-Tf = 10.0
+Tf = 20.0
 alpha_vec = [0.05, 0.5]
 # alpha_vec = [0.05]
 
@@ -144,7 +144,7 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
-Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[-1-3/np.sqrt(2), 6-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=10),
+Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[-1-3/np.sqrt(2), 6-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=50),
 # Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
@@ -161,6 +161,8 @@ pp_theta = np.deg2rad(180.0)
 pp_factor = 0.5
 
 def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool = False):
+
+    np.random.seed(100 + n_mc)
     x1_init, x2_init = Scenario.x1_init.copy(), Scenario.x2_init.copy()
     x1_des, theta_des = Scenario.x1_des.copy(), Scenario.theta_des
     Obstcles = Scenario.obstacles
@@ -254,7 +256,7 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
         w_target = int(FIG_INCHES * DPI)
         h_target = int(FIG_INCHES * DPI)
 
-    print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}")
+    # print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}")
     t = 0.0
     t_hist = np.array([[t]])
     x1_hist, v1_hist, a1_hist = x1_init, np.zeros((1, 2)), np.zeros((0, 2))
@@ -265,7 +267,6 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
     EndSimulation = False
     i_acc = 0
     GameSol.success = False
-    reverse_init = False
     avoid_Obs = 0.0
     while not EndSimulation:
         if GameSol.success:
@@ -286,8 +287,7 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
             GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs, log=enable_plot)
         if not GameSol.success:
             x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
-            x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner=x1_guess, reverse_init=reverse_init)
-            reverse_init = False
+            x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner=x1_guess)
 
             z0 = np.zeros_like(GameSol.z0)
             z0[GameSol.indx_x1:GameSol.indx_x1 + N + 1] = x1_guess[:, 0]
@@ -310,8 +310,6 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
         else:
             i_acc += 1
         if i_acc >= N - 1:
-            print("Reversing Init Guess")
-            reverse_init = True
             i_acc = N - 1
             
         # Puer persuit acceleration command for human
@@ -334,7 +332,7 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
         else:
             a1_cmd = GameSol.sol.a1_sol[i_acc, :]
         if n_mc > 1:
-            a1_cmd += 2.5 * np.random.normal(0.0, 1.0, 2)
+            a1_cmd += 2.0 * np.random.normal(0.0, 1.0, 2)
         
         a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
         a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc, :], GameSol.a2_max)
@@ -408,24 +406,24 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
             if rt_plot:
                 for i in range(len(p12_line_pred)):
                     p12_line_pred[i].set_data([], [])
+                if n_mc == 0:
+                    if fig is not None: fig.savefig(f"{Scenario.name}_traj_final.png")
+                    ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], '-', color=hist_col[0], linewidth=2, label=f'alpha={alpha}')
+                    ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '-', color=hist_col[0], linewidth=2)
+                    ax_xy.legend(ncol=4, loc='upper center')
+                    ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[0], linewidth=2)
+                    ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
+                    ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), '-', color=hist_col[0], linewidth=2)
+                    ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
+                    ax_dist.plot(t_hist, np.linalg.norm(x1_hist - x2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
+                    p1_pred.set_data([], [])
+                    p2_pred.set_data([], [])
+                    p1_hist.set_data([], [])
+                    p2_hist.set_data([], [])
                 
-                if fig is not None: fig.savefig(f"{Scenario.name}_traj_final.png")
-                ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], '-', color=hist_col[0], linewidth=2, label=f'alpha={alpha}')
-                ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '-', color=hist_col[0], linewidth=2)
-                ax_xy.legend(ncol=4, loc='upper center')
-                ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[0], linewidth=2)
-                ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
-                ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), '-', color=hist_col[0], linewidth=2)
-                ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
-                ax_dist.plot(t_hist, np.linalg.norm(x1_hist - x2_hist, axis=1), '-', color=hist_col[0], linewidth=2)
-                p1_pred.set_data([], [])
-                p2_pred.set_data([], [])
-                p1_hist.set_data([], [])
-                p2_hist.set_data([], [])
-                
-                for k in range(9, np.shape(x1_hist)[0]-1, 10):
-                    ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], '-', color=hist_col[0], linewidth=1)
-                if fig is not None: fig.savefig(f"{Scenario.name}_final.png")
+                    for k in range(9, np.shape(x1_hist)[0]-1, 10):
+                        ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], '-', color=hist_col[0], linewidth=1)
+                    if fig is not None: fig.savefig(f"{Scenario.name}_final.png")
 
     dist_series = np.linalg.norm(x1_hist - x2_hist, axis=1)
     a1_mag = np.linalg.norm(a1_hist, axis=1)  # magnitude gives total acceleration per step
@@ -474,7 +472,7 @@ def run_scenario(Scenario: Scenario):
             mc_run_stats.append(run_single_mc(Scenario, alpha, mc_indices[0], enable_plot=True))
             mc_indices = mc_indices[1:]
         if mc_indices:
-            max_workers = max(1, min(len(mc_indices), (os.cpu_count() or 1) - 1))
+            max_workers = max(1, min(len(mc_indices), (os.cpu_count() or 1) - 8))
             # Use spawn so Julia is initialized fresh per worker (fork + Julia can segfault/ReadOnlyMemoryError)
             with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
                 futures = [executor.submit(run_single_mc, Scenario, alpha, mc_idx, False) for mc_idx in mc_indices]
