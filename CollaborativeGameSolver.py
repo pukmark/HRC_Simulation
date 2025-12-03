@@ -183,7 +183,7 @@ class CollaborativeGame():
         self.MPC_guess_robot_init()
 
 
-    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None, avoid_Obs = 0.0):
+    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, z0 = None, avoid_Obs = 0.0, log: bool = True):
 
         from julia.api import Julia
         jl = Julia(compiled_modules=False)
@@ -310,7 +310,12 @@ class CollaborativeGame():
             # self.sol.lam2_sol = (z[indx:indx+2*self.N]).reshape(1,-1).T; indx += 2*self.N
             # self.sol.sig_sol = (z[indx:]).reshape(2,-1).T
 
-        print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(self.sol.Slack):.4e}')
+        if log:
+            try:
+                print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(self.sol.Slack):.4e}')
+            except BlockingIOError:
+                # Avoid crashing if stdout pipe is saturated (e.g., headless workers).
+                pass
 
         return
 

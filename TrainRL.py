@@ -388,7 +388,17 @@ def rollout_with_solver(
             z0[GameSol.indx_ay2:GameSol.indx_ay2 + cfg.horizon - 1] = GameSol.sol.a2_sol[1:, 1]
 
             GameSol.Solve(
-                t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs
+                t,
+                x1_state,
+                v1_state,
+                x1_des,
+                x2_state,
+                v2_state,
+                x2_des,
+                alpha,
+                z0=z0,
+                avoid_Obs=avoid_Obs,
+                log=True,
             )
         if not GameSol.success:
             x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
@@ -411,7 +421,17 @@ def rollout_with_solver(
             z0[GameSol.indx_ay2:GameSol.indx_ay2 + H] = a2_guess[:, 1]
 
             GameSol.Solve(
-                t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs
+                t,
+                x1_state,
+                v1_state,
+                x1_des,
+                x2_state,
+                v2_state,
+                x2_des,
+                alpha,
+                z0=z0,
+                avoid_Obs=avoid_Obs,
+                log=True,
             )
 
         if GameSol.success:

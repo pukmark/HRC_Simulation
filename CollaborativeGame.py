@@ -3,7 +3,6 @@ import os
 os.system('clear')
 
 import numpy as np
-import casadi as ca
 import math
 from dataclasses import dataclass
 
@@ -17,6 +16,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Tuple
 
+np.random.seed(100)
+
 @dataclass
 class Scenario:
     name: str
@@ -25,6 +26,7 @@ class Scenario:
     x1_des: np.ndarray
     theta_des: float
     obstacles: List[Dict[str, np.ndarray]]
+    Nmc: int = 1
 
 def LimitedCmd(v: np.array, v_max: float):
     if np.linalg.norm(v) > v_max:
@@ -157,7 +159,7 @@ pp_theta = np.deg2rad(180.0)
 # pp_theta = np.atan2( (Scenarios[0].x1_des[0,1]-Scenarios[0].x1_init[0,1]), (Scenarios[0].x1_des[0,0]-Scenarios[0].x1_init[0,0]) )
 pp_factor = 0.5
 
-def run_scenario(Scenario):
+def run_scenario(Scenario: Scenario):
     x1_init, x2_init, x1_des, theta_des = Scenario.x1_init, Scenario.x2_init, Scenario.x1_des, Scenario.theta_des
     Obstcles = Scenario.obstacles
 
@@ -250,184 +252,217 @@ def run_scenario(Scenario):
         w_target = int(FIG_INCHES * DPI)
         h_target = int(FIG_INCHES * DPI)
 
+    mc_run_stats = []
+
     for ialpha, alpha in enumerate(alpha_vec):
-        t = 0.0
-        t_hist = np.array([[t]])
-        x1_hist, v1_hist, a1_hist = x1_init, np.zeros((1, 2)), np.zeros((0, 2))
-        x2_hist, v2_hist, a2_hist = x2_init, np.zeros((1, 2)), np.zeros((0, 2))
+        for n_mc in range(Scenario.Nmc):
+            print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}")
+            t = 0.0
+            t_hist = np.array([[t]])
+            x1_hist, v1_hist, a1_hist = x1_init, np.zeros((1, 2)), np.zeros((0, 2))
+            x2_hist, v2_hist, a2_hist = x2_init, np.zeros((1, 2)), np.zeros((0, 2))
 
-        x1_state, x2_state = x1_init, x2_init
-        v1_state, v2_state = np.zeros((1, 2)), np.zeros((1, 2))
-        EndSimulation = False
-        i_acc = 0
-        GameSol.success = False
-        reverse_init = False
-        avoid_Obs = 0.0
-        while not EndSimulation:
-            if GameSol.success:
-                z0 = GameSol.z0
-                z0[GameSol.indx_x1:GameSol.indx_x1 + N] = GameSol.sol.x1_sol[1:, 0]
-                z0[GameSol.indx_y1:GameSol.indx_y1 + N] = GameSol.sol.x1_sol[1:, 1]
-                z0[GameSol.indx_vx1:GameSol.indx_vx1 + N] = GameSol.sol.v1_sol[1:, 0]
-                z0[GameSol.indx_vy1:GameSol.indx_vy1 + N] = GameSol.sol.v1_sol[1:, 1]
-                z0[GameSol.indx_ax1:GameSol.indx_ax1 + N - 1] = GameSol.sol.a1_sol[1:, 0]
-                z0[GameSol.indx_ay1:GameSol.indx_ay1 + N - 1] = GameSol.sol.a1_sol[1:, 1]
-                z0[GameSol.indx_x2:GameSol.indx_x2 + N] = GameSol.sol.x2_sol[1:, 0]
-                z0[GameSol.indx_y2:GameSol.indx_y2 + N] = GameSol.sol.x2_sol[1:, 1]
-                z0[GameSol.indx_vx2:GameSol.indx_vx2 + N] = GameSol.sol.v2_sol[1:, 0]
-                z0[GameSol.indx_vy2:GameSol.indx_vy2 + N] = GameSol.sol.v2_sol[1:, 1]
-                z0[GameSol.indx_ax2:GameSol.indx_ax2 + N - 1] = GameSol.sol.a2_sol[1:, 0]
-                z0[GameSol.indx_ay2:GameSol.indx_ay2 + N - 1] = GameSol.sol.a2_sol[1:, 1]
+            x1_state, x2_state = x1_init, x2_init
+            v1_state, v2_state = np.zeros((1, 2)), np.zeros((1, 2))
+            EndSimulation = False
+            i_acc = 0
+            GameSol.success = False
+            reverse_init = False
+            avoid_Obs = 0.0
+            while not EndSimulation:
+                if GameSol.success:
+                    z0 = GameSol.z0
+                    z0[GameSol.indx_x1:GameSol.indx_x1 + N] = GameSol.sol.x1_sol[1:, 0]
+                    z0[GameSol.indx_y1:GameSol.indx_y1 + N] = GameSol.sol.x1_sol[1:, 1]
+                    z0[GameSol.indx_vx1:GameSol.indx_vx1 + N] = GameSol.sol.v1_sol[1:, 0]
+                    z0[GameSol.indx_vy1:GameSol.indx_vy1 + N] = GameSol.sol.v1_sol[1:, 1]
+                    z0[GameSol.indx_ax1:GameSol.indx_ax1 + N - 1] = GameSol.sol.a1_sol[1:, 0]
+                    z0[GameSol.indx_ay1:GameSol.indx_ay1 + N - 1] = GameSol.sol.a1_sol[1:, 1]
+                    z0[GameSol.indx_x2:GameSol.indx_x2 + N] = GameSol.sol.x2_sol[1:, 0]
+                    z0[GameSol.indx_y2:GameSol.indx_y2 + N] = GameSol.sol.x2_sol[1:, 1]
+                    z0[GameSol.indx_vx2:GameSol.indx_vx2 + N] = GameSol.sol.v2_sol[1:, 0]
+                    z0[GameSol.indx_vy2:GameSol.indx_vy2 + N] = GameSol.sol.v2_sol[1:, 1]
+                    z0[GameSol.indx_ax2:GameSol.indx_ax2 + N - 1] = GameSol.sol.a2_sol[1:, 0]
+                    z0[GameSol.indx_ay2:GameSol.indx_ay2 + N - 1] = GameSol.sol.a2_sol[1:, 1]
 
-                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs)
-            if not GameSol.success:
-                x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
-                x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner=x1_guess, reverse_init=reverse_init)
-                reverse_init = False
+                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs, log=True)
+                if not GameSol.success:
+                    x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
+                    x2_guess, v2_guess, a2_guess = GameSol.MPC_guess_robot_calc(x2_state, v2_state, x2_des, x_partner=x1_guess, reverse_init=reverse_init)
+                    reverse_init = False
 
-                z0 = np.zeros_like(GameSol.z0)
-                z0[GameSol.indx_x1:GameSol.indx_x1 + N + 1] = x1_guess[:, 0]
-                z0[GameSol.indx_y1:GameSol.indx_y1 + N + 1] = x1_guess[:, 1]
-                z0[GameSol.indx_vx1:GameSol.indx_vx1 + N + 1] = v1_guess[:, 0]
-                z0[GameSol.indx_vy1:GameSol.indx_vy1 + N + 1] = v1_guess[:, 1]
-                z0[GameSol.indx_ax1:GameSol.indx_ax1 + N] = a1_guess[:, 0]
-                z0[GameSol.indx_ay1:GameSol.indx_ay1 + N] = a1_guess[:, 1]
-                z0[GameSol.indx_x2:GameSol.indx_x2 + N + 1] = x2_guess[:, 0]
-                z0[GameSol.indx_y2:GameSol.indx_y2 + N + 1] = x2_guess[:, 1]
-                z0[GameSol.indx_vx2:GameSol.indx_vx2 + N + 1] = v2_guess[:, 0]
-                z0[GameSol.indx_vy2:GameSol.indx_vy2 + N + 1] = v2_guess[:, 1]
-                z0[GameSol.indx_ax2:GameSol.indx_ax2 + N] = a2_guess[:, 0]
-                z0[GameSol.indx_ay2:GameSol.indx_ay2 + N] = a2_guess[:, 1]
+                    z0 = np.zeros_like(GameSol.z0)
+                    z0[GameSol.indx_x1:GameSol.indx_x1 + N + 1] = x1_guess[:, 0]
+                    z0[GameSol.indx_y1:GameSol.indx_y1 + N + 1] = x1_guess[:, 1]
+                    z0[GameSol.indx_vx1:GameSol.indx_vx1 + N + 1] = v1_guess[:, 0]
+                    z0[GameSol.indx_vy1:GameSol.indx_vy1 + N + 1] = v1_guess[:, 1]
+                    z0[GameSol.indx_ax1:GameSol.indx_ax1 + N] = a1_guess[:, 0]
+                    z0[GameSol.indx_ay1:GameSol.indx_ay1 + N] = a1_guess[:, 1]
+                    z0[GameSol.indx_x2:GameSol.indx_x2 + N + 1] = x2_guess[:, 0]
+                    z0[GameSol.indx_y2:GameSol.indx_y2 + N + 1] = x2_guess[:, 1]
+                    z0[GameSol.indx_vx2:GameSol.indx_vx2 + N + 1] = v2_guess[:, 0]
+                    z0[GameSol.indx_vy2:GameSol.indx_vy2 + N + 1] = v2_guess[:, 1]
+                    z0[GameSol.indx_ax2:GameSol.indx_ax2 + N] = a2_guess[:, 0]
+                    z0[GameSol.indx_ay2:GameSol.indx_ay2 + N] = a2_guess[:, 1]
 
-                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs)
+                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, avoid_Obs=avoid_Obs, log=True)
 
-            if GameSol.success:
-                i_acc = 0
-            else:
-                i_acc += 1
-            if i_acc >= N - 1:
-                print("Reversing Init Guess")
-                reverse_init = True
-                i_acc = N - 1
-                
-            # Puer persuit acceleration command for human
-            if Human_PreDefined_Traj:
-                a1_cmd = np.zeros((1,2))
-                # Pursuit point
-                pp_dist = np.linalg.norm(x1_des - x1_state)
-                pp_point = x1_des + pp_dist * pp_factor * np.array([np.cos(pp_theta), np.sin(pp_theta)])
-                dpos_3d = np.array( [pp_point[0,0] - x1_state[0,0], pp_point[0,1] - x1_state[0,1], 0])
-                v_3d = np.array( [v1_state[0,0], v1_state[0,1], 0])
-                lam_dot = np.cross(dpos_3d, v_3d) / (np.linalg.norm(dpos_3d)**2 + 1e-6)
-                a1_cmd[0,:] = 2.0 * np.linalg.norm(v1_state) * np.cross(v_3d, lam_dot)[0:2]
-                # Velocity matching term
-                tau = 0.5
-                if t <4.0:
-                    a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max*0.6) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+                if GameSol.success:
+                    i_acc = 0
                 else:
-                    a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
-                a1_cmd += 2.5 * np.random.normal(0.0, 1.0, 2)
-                a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
-            else:
-                a1_cmd = LimitedCmd(GameSol.sol.a1_sol[i_acc, :] + 2.5 * np.random.normal(0.0, 1.0, 2), GameSol.a1_max)
-            a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc, :], GameSol.a2_max)
-            x1_state = x1_state + dt * v1_state + 0.5 * dt**2 * a1_cmd
-            v1_state = v1_state + dt * a1_cmd
-            x2_state = x2_state + dt * v2_state + 0.5 * dt**2 * a2_cmd
-            v2_state = v2_state + dt * a2_cmd
-
-            t += dt
-
-            x1_hist = np.vstack((x1_hist, x1_state))
-            v1_hist = np.vstack((v1_hist, v1_state))
-            a1_hist = np.vstack((a1_hist, a1_cmd))
-            x2_hist = np.vstack((x2_hist, x2_state))
-            v2_hist = np.vstack((v2_hist, v2_state))
-            a2_hist = np.vstack((a2_hist, a2_cmd))
-            t_hist = np.vstack((t_hist, t))
-
-            if RT_Plot:
-                p1_plot.set_data([x1_state[0, 0]], [x1_state[0, 1]])
-                p2_plot.set_data([x2_state[0, 0]], [x2_state[0, 1]])
-                p12_line.set_data([x1_state[0, 0], x2_state[0, 0]], [x1_state[0, 1], x2_state[0, 1]])
-                indx = np.linspace(0, N, 1 + len(p12_line_pred))
-                if not Human_PreDefined_Traj:
-                    for i in range(len(p12_line_pred)):
-                        i_indx = int(indx[i + 1])
-                        p12_line_pred[i].set_data([GameSol.sol.x1_sol[i_indx, 0], GameSol.sol.x2_sol[i_indx, 0]], [GameSol.sol.x1_sol[i_indx, 1], GameSol.sol.x2_sol[i_indx, 1]])
-                    p1_pred.set_data(GameSol.sol.x1_sol[:, 0], GameSol.sol.x1_sol[:, 1])
-                p2_pred.set_data(GameSol.sol.x2_sol[:, 0], GameSol.sol.x2_sol[:, 1])
-                p1_hist.set_data(x1_hist[:, 0], x1_hist[:, 1])
-                p2_hist.set_data(x2_hist[:, 0], x2_hist[:, 1])
-                tgt1_plot.set_data([x1_des[0, 0]], [x1_des[0, 1]])
-                tgt2_plot.set_data([x2_des[0, 0]], [x2_des[0, 1]])
-                ax_xy.set_title(f'Alpha is {alpha}, Time: {t:2.2}[Sec]')
-                ax_xy.legend(ncol=4, loc='upper center')
-
-                t_pred = np.linspace(t - dt, t - dt + N * dt, N + 1)
-                p1_vel.set_data([t], [np.linalg.norm(v1_state)])
-                p2_vel.set_data([t], [np.linalg.norm(v2_state)])
-                if not Human_PreDefined_Traj:
-                    p1_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v1_sol, axis=1))
-                p2_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v2_sol, axis=1))
-                p1_vel_hist.set_data(t_hist, np.linalg.norm(v1_hist, axis=1))
-                p2_vel_hist.set_data(t_hist, np.linalg.norm(v2_hist, axis=1))
-
-                p1_acc.set_data([t], [np.linalg.norm(a1_cmd)])
-                p2_acc.set_data([t], [np.linalg.norm(a2_cmd)])
-                if not Human_PreDefined_Traj:
-                    p1_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a1_sol, axis=1))
-                p2_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a2_sol, axis=1))
-                p1_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a1_hist, axis=1))
-                p2_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a2_hist, axis=1))
-
-                p12_dist.set_data([t], [np.linalg.norm(x1_state - x2_state)])
-                if not Human_PreDefined_Traj:
-                    p12_dist_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.x1_sol - GameSol.sol.x2_sol, axis=1))
-                p12_dist_hist.set_data(t_hist[:, 0], np.linalg.norm(x1_hist - x2_hist, axis=1))
-                
-                if t_hist.shape[0] % 10 == 0:
-                    ax_xy.plot([x1_state[0, 0], x2_state[0,0]], [x1_state[0, 1], x2_state[0, 1]], 'r-', linewidth=1)
-
-                plt.pause(0.1)
-
-                fig.canvas.draw()
-                frame = capture_frame_agg(fig, canvas, w_target, h_target)
-                Frames.append(frame)
-            else:
-                print("Current State: x1:", x1_state, "x2_state:", x2_state)
-
-            # if np.linalg.norm(GameSol.sol.v2_sol[-1, :]) < 0.5 and np.linalg.norm(GameSol.sol.x2_sol[-1, :] - x2_des) > 0.5:
-            #     if avoid_Obs < 0.5:
-            #         avoid_Obs = 1.0
-            #         t_avoid_start = t
-            #     else:
-            #         avoid_Obs = 0.0
-            #     GameSol.success = False
-            # elif avoid_Obs > 0.5 and (t - t_avoid_start) > 0.5:
-            #     avoid_Obs = 0.0
-            #     GameSol.success = False
-            # if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05) or (np.linalg.norm(x1_state - x2_state) > GameSol.d + 10*GameSol.delta_d):
-            if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05):
-                EndSimulation = True
-                for i in range(len(p12_line_pred)):
-                    p12_line_pred[i].set_data([], [])
-                
-                if fig is not None: fig.savefig(f"{Scenario.name}_traj_final.png")
-                if RT_Plot:
-                    ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2, label=f'alpha={alpha}')
-                    ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2)
-                    ax_xy.legend()
-                    p1_pred.set_data([], [])
-                    p2_pred.set_data([], [])
-                    p1_hist.set_data([], [])
-                    p2_hist.set_data([], [])
+                    i_acc += 1
+                if i_acc >= N - 1:
+                    print("Reversing Init Guess")
+                    reverse_init = True
+                    i_acc = N - 1
                     
-                    for k in range(9, np.shape(x1_hist)[0]-1, 10):
-                        ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], '-', color=hist_col[ialpha], linewidth=1)
-                    if fig is not None: fig.savefig(f"{Scenario.name}_final.png")
+                # Puer persuit acceleration command for human
+                if Human_PreDefined_Traj:
+                    a1_cmd = np.zeros((1,2))
+                    # Pursuit point
+                    pp_dist = np.linalg.norm(x1_des - x1_state)
+                    pp_point = x1_des + pp_dist * pp_factor * np.array([np.cos(pp_theta), np.sin(pp_theta)])
+                    dpos_3d = np.array( [pp_point[0,0] - x1_state[0,0], pp_point[0,1] - x1_state[0,1], 0])
+                    v_3d = np.array( [v1_state[0,0], v1_state[0,1], 0])
+                    lam_dot = np.cross(dpos_3d, v_3d) / (np.linalg.norm(dpos_3d)**2 + 1e-6)
+                    a1_cmd[0,:] = 2.0 * np.linalg.norm(v1_state) * np.cross(v_3d, lam_dot)[0:2]
+                    # Velocity matching term
+                    tau = 0.5
+                    if t <4.0:
+                        a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max*0.6) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+                    else:
+                        a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+                    a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
+                else:
+                    a1_cmd = GameSol.sol.a1_sol[i_acc, :]
+                if n_mc > 1:
+                    a1_cmd += 2.5 * np.random.normal(0.0, 1.0, 2)
+                
+                a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
+                a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc, :], GameSol.a2_max)
+                x1_state = x1_state + dt * v1_state + 0.5 * dt**2 * a1_cmd
+                v1_state = v1_state + dt * a1_cmd
+                x2_state = x2_state + dt * v2_state + 0.5 * dt**2 * a2_cmd
+                v2_state = v2_state + dt * a2_cmd
 
+                t += dt
 
+                x1_hist = np.vstack((x1_hist, x1_state))
+                v1_hist = np.vstack((v1_hist, v1_state))
+                a1_hist = np.vstack((a1_hist, a1_cmd))
+                x2_hist = np.vstack((x2_hist, x2_state))
+                v2_hist = np.vstack((v2_hist, v2_state))
+                a2_hist = np.vstack((a2_hist, a2_cmd))
+                t_hist = np.vstack((t_hist, t))
+
+                if RT_Plot:
+                    p1_plot.set_data([x1_state[0, 0]], [x1_state[0, 1]])
+                    p2_plot.set_data([x2_state[0, 0]], [x2_state[0, 1]])
+                    p12_line.set_data([x1_state[0, 0], x2_state[0, 0]], [x1_state[0, 1], x2_state[0, 1]])
+                    indx = np.linspace(0, N, 1 + len(p12_line_pred))
+                    if not Human_PreDefined_Traj:
+                        for i in range(len(p12_line_pred)):
+                            i_indx = int(indx[i + 1])
+                            p12_line_pred[i].set_data([GameSol.sol.x1_sol[i_indx, 0], GameSol.sol.x2_sol[i_indx, 0]], [GameSol.sol.x1_sol[i_indx, 1], GameSol.sol.x2_sol[i_indx, 1]])
+                        p1_pred.set_data(GameSol.sol.x1_sol[:, 0], GameSol.sol.x1_sol[:, 1])
+                    p2_pred.set_data(GameSol.sol.x2_sol[:, 0], GameSol.sol.x2_sol[:, 1])
+                    p1_hist.set_data(x1_hist[:, 0], x1_hist[:, 1])
+                    p2_hist.set_data(x2_hist[:, 0], x2_hist[:, 1])
+                    tgt1_plot.set_data([x1_des[0, 0]], [x1_des[0, 1]])
+                    tgt2_plot.set_data([x2_des[0, 0]], [x2_des[0, 1]])
+                    ax_xy.set_title(f'Alpha is {alpha}, Time: {t:2.2}[Sec]')
+                    ax_xy.legend(ncol=4, loc='upper center')
+
+                    t_pred = np.linspace(t - dt, t - dt + N * dt, N + 1)
+                    p1_vel.set_data([t], [np.linalg.norm(v1_state)])
+                    p2_vel.set_data([t], [np.linalg.norm(v2_state)])
+                    if not Human_PreDefined_Traj:
+                        p1_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v1_sol, axis=1))
+                    p2_vel_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.v2_sol, axis=1))
+                    p1_vel_hist.set_data(t_hist, np.linalg.norm(v1_hist, axis=1))
+                    p2_vel_hist.set_data(t_hist, np.linalg.norm(v2_hist, axis=1))
+
+                    p1_acc.set_data([t], [np.linalg.norm(a1_cmd)])
+                    p2_acc.set_data([t], [np.linalg.norm(a2_cmd)])
+                    if not Human_PreDefined_Traj:
+                        p1_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a1_sol, axis=1))
+                    p2_acc_pred.set_data(t_pred[:-1], np.linalg.norm(GameSol.sol.a2_sol, axis=1))
+                    p1_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a1_hist, axis=1))
+                    p2_acc_hist.set_data(t_hist[:-1], np.linalg.norm(a2_hist, axis=1))
+
+                    p12_dist.set_data([t], [np.linalg.norm(x1_state - x2_state)])
+                    if not Human_PreDefined_Traj:
+                        p12_dist_pred.set_data(t_pred, np.linalg.norm(GameSol.sol.x1_sol - GameSol.sol.x2_sol, axis=1))
+                    p12_dist_hist.set_data(t_hist[:, 0], np.linalg.norm(x1_hist - x2_hist, axis=1))
+                    
+                    if t_hist.shape[0] % 10 == 0:
+                        ax_xy.plot([x1_state[0, 0], x2_state[0,0]], [x1_state[0, 1], x2_state[0, 1]], 'r-', linewidth=1)
+
+                    plt.pause(0.1)
+
+                    fig.canvas.draw()
+                    if RT_Plot and n_mc == 1:
+                        frame = capture_frame_agg(fig, canvas, w_target, h_target)
+                        Frames.append(frame)
+                else:
+                    print("Current State: x1:", x1_state, "x2_state:", x2_state)
+
+                # if np.linalg.norm(GameSol.sol.v2_sol[-1, :]) < 0.5 and np.linalg.norm(GameSol.sol.x2_sol[-1, :] - x2_des) > 0.5:
+                #     if avoid_Obs < 0.5:
+                #         avoid_Obs = 1.0
+                #         t_avoid_start = t
+                #     else:
+                #         avoid_Obs = 0.0
+                #     GameSol.success = False
+                # elif avoid_Obs > 0.5 and (t - t_avoid_start) > 0.5:
+                #     avoid_Obs = 0.0
+                #     GameSol.success = False
+                # if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05) or (np.linalg.norm(x1_state - x2_state) > GameSol.d + 10*GameSol.delta_d):
+                if (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05):
+                    EndSimulation = True
+                    for i in range(len(p12_line_pred)):
+                        p12_line_pred[i].set_data([], [])
+                    
+                    if fig is not None: fig.savefig(f"{Scenario.name}_traj_final.png")
+                    if RT_Plot and n_mc == 1:
+                        ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2, label=f'alpha={alpha}')
+                        ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2)
+                        ax_xy.legend(ncol=4, loc='upper center')
+                        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_dist.plot(t_hist, np.linalg.norm(x1_hist - x2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        p1_pred.set_data([], [])
+                        p2_pred.set_data([], [])
+                        p1_hist.set_data([], [])
+                        p2_hist.set_data([], [])
+                        
+                        for k in range(9, np.shape(x1_hist)[0]-1, 10):
+                            ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], '-', color=hist_col[ialpha], linewidth=1)
+                        if fig is not None: fig.savefig(f"{Scenario.name}_final.png")
+
+            dist_series = np.linalg.norm(x1_hist - x2_hist, axis=1)
+            a1_mag = np.linalg.norm(a1_hist, axis=1)  # magnitude gives total acceleration per step
+            a2_mag = np.linalg.norm(a2_hist, axis=1)
+            scenario_time = t_hist[-1, 0]
+            mc_run_stats.append(
+                np.array(
+                    [
+                        alpha,
+                        n_mc + 1,
+                        dist_series.mean(),
+                        dist_series.std(),
+                        a1_mag.mean(),
+                        a1_mag.std(),
+                        a2_mag.mean(),
+                        a2_mag.std(),
+                        scenario_time,
+                        np.std([scenario_time]),
+                    ],
+                    dtype=float,
+                )
+            )
 
     if RT_Plot:
         if Frames:
@@ -443,6 +478,29 @@ def run_scenario(Scenario):
                 writer.append_data(frame)
             writer.close()
         plt.close(fig)
+
+    if mc_run_stats:
+        header = ",".join(
+            [
+                "alpha",
+                "mc_run",
+                "distance_mean",
+                "distance_std",
+                "a1_acc_mean",
+                "a1_acc_std",
+                "a2_acc_mean",
+                "a2_acc_std",
+                "scenario_time",
+                "scenario_time_std",
+            ]
+        )
+        np.savetxt(
+            f"{Scenario.name}_mc_stats.csv",
+            np.vstack(mc_run_stats),
+            delimiter=",",
+            header=header,
+            comments="",
+        )
 
 
 def main():

@@ -311,7 +311,7 @@ def run(args):
             z0[GameSol.indx_ax2:GameSol.indx_ax2+N-1] = GameSol.sol.a2_sol[1:,0]
             z0[GameSol.indx_ay2:GameSol.indx_ay2+N-1] = GameSol.sol.a2_sol[1:,1]
 
-            GameSol.Solve(time.time(), x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+            GameSol.Solve(time.time(), x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, log=True)
         if not GameSol.success:
 
             # Build warm start via MPC guesses
@@ -335,7 +335,7 @@ def run(args):
             # Solve game
             try:
                 v1_state = np.zeros((1,2))
-                GameSol.Solve(time.time(), x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0)
+                GameSol.Solve(time.time(), x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, z0=z0, log=True)
                 GameSol.sol.time = time.time()
             except Exception as e:
                 print("[Solve] Exception:", e)
