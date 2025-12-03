@@ -29,14 +29,22 @@ def _iter_alphas(data: np.ndarray) -> Iterable[Tuple[float, np.ndarray]]:
         mask = data["alpha"] == alpha
         yield alpha, np.sort(data[mask], order="mc_run")
 
+
+def _has_distance_range(data: np.ndarray) -> bool:
+    return {"distance_min", "distance_max"}.issubset(set(data.dtype.names))
+
+
 def _filter_valid_rows(data: np.ndarray) -> Tuple[np.ndarray, int]:
     """
     Drop rows where metrics were marked invalid (-1 sentinel).
     Returns (filtered_data, num_dropped).
     """
+    has_dist_range = _has_distance_range(data)
     valid_mask = (
         (data["distance_mean"] >= 0)
         & (data["distance_std"] >= 0)
+        & ((data["distance_min"] >= 0) if has_dist_range else True)
+        & ((data["distance_max"] >= 0) if has_dist_range else True)
         & (data["a1_acc_mean"] >= 0)
         & (data["a1_acc_std"] >= 0)
         & (data["a2_acc_mean"] >= 0)
@@ -79,6 +87,8 @@ def summarize_by_alpha(data: np.ndarray):
                 "n": len(grp),
                 "distance_mean": float(np.mean(grp["distance_mean"])),
                 "distance_std": float(np.mean(grp["distance_std"])),
+                "distance_min": float(np.mean(grp["distance_min"])) if "distance_min" in grp.dtype.names else None,
+                "distance_max": float(np.mean(grp["distance_max"])) if "distance_max" in grp.dtype.names else None,
                 "a1_acc_mean": float(np.mean(grp["a1_acc_mean"])),
                 "a1_acc_std": float(np.mean(grp["a1_acc_std"])),
                 "a2_acc_mean": float(np.mean(grp["a2_acc_mean"])),
@@ -107,6 +117,28 @@ def _plot_metric(ax, alpha_groups, mean_key: str, std_key: str, ylabel: str):
     ax.legend()
 
 
+def _plot_distance(ax, alpha_groups, has_range: bool):
+    colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(alpha_groups)))
+    for color, (alpha, grp) in zip(colors, alpha_groups):
+        mc = grp["mc_run"]
+        if has_range:
+            ax.fill_between(mc, grp["distance_min"], grp["distance_max"], color=color, alpha=0.15)
+        ax.errorbar(
+            mc,
+            grp["distance_mean"],
+            yerr=grp["distance_std"],
+            fmt="o-",
+            capsize=3,
+            label=f"alpha={alpha:.2f}",
+            color=color,
+        )
+    ax.set_xlabel("MC run")
+    ylabel = "Distance [m]" if not has_range else "Distance [m] (mean ± std, min/max band)"
+    ax.set_ylabel(ylabel)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+
 def plot_results(data: np.ndarray, csv_path: Path, output: Path | None = None, show: bool = False) -> Path:
     alpha_groups = list(_iter_alphas(data))
     if not alpha_groups:
@@ -115,7 +147,8 @@ def plot_results(data: np.ndarray, csv_path: Path, output: Path | None = None, s
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
     fig.suptitle(f"Stats from {csv_path.name}")
 
-    _plot_metric(axes[0], alpha_groups, "distance_mean", "distance_std", "Distance [m]")
+    has_range = _has_distance_range(data)
+    _plot_distance(axes[0], alpha_groups, has_range)
     _plot_metric(axes[1], alpha_groups, "a1_acc_mean", "a1_acc_std", "Human accel [m/s^2]")
 
     # Overlay robot accel on a second y-axis for clarity.
@@ -186,15 +219,23 @@ def main():
 
     print("MC means per alpha:")
     for summary in summarize_by_alpha(data):
-        print(
-            f"alpha={summary['alpha']:.3f} "
-            f"(n={summary['n']}): "
-            f"dist_mean={summary['distance_mean']:.3f}, "
-            f"dist_std_mean={summary['distance_std']:.3f}, "
-            f"a1_acc_mean={summary['a1_acc_mean']:.3f}, "
-            f"a2_acc_mean={summary['a2_acc_mean']:.3f}, "
-            f"scenario_time={summary['scenario_time']:.3f}"
+        parts = [
+            f"alpha={summary['alpha']:.3f} (n={summary['n']}):",
+            f"dist_mean={summary['distance_mean']:.3f}",
+            f"dist_std_mean={summary['distance_std']:.3f}",
+        ]
+        if summary.get("distance_min") is not None:
+            parts.append(f"dist_min_mean={summary['distance_min']:.3f}")
+        if summary.get("distance_max") is not None:
+            parts.append(f"dist_max_mean={summary['distance_max']:.3f}")
+        parts.extend(
+            [
+                f"a1_acc_mean={summary['a1_acc_mean']:.3f}",
+                f"a2_acc_mean={summary['a2_acc_mean']:.3f}",
+                f"scenario_time={summary['scenario_time']:.3f}",
+            ]
         )
+        print(" ".join(parts))
 
     output_path = plot_results(data, args.csv, output=args.out, show=args.show)
     print(f"Saved plot to {output_path}")
