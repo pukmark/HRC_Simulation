@@ -27,18 +27,14 @@ class CollaborativeGame():
         self.verbose = verbose
         self.Obstcles = Obstcles
         self.n_dim = 2
+        self.d = d
+        self.delta_d = delta_d
 
         self.d_min, self.d_max = d-delta_d, d+delta_d
         self.v1_max = 1.5
         self.a1_max = 5.0
         self.v2_max = 3.0
-        self.a2_max = 25.0
-
-        # if self.v1_max < self.v1_min:
-        #     raise ValueError(f"Expected v1_max >= v1_min, received v1_max={self.v1_max} and v1_min={self.v1_min}")
-        # if self.v2_max < self.v2_min:
-        #     raise ValueError(f"Expected v2_max >= v2_min, received v2_max={self.v2_max} and v2_min={self.v2_min}")
-
+        self.a2_max = 15.0
 
         # Define the states and controls
         x1, x2 = ca.SX.sym('x1', N+1, 2), ca.SX.sym('x2', N+1, 2)
@@ -51,9 +47,10 @@ class CollaborativeGame():
         Slack = ca.SX.sym('Slack', N)
         avoid_Obs = ca.SX.sym('avoid_Obs',1)
 
-        shared_cost = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1]) + 0.01*ca.sumsqr(a1) + 0.01*ca.sumsqr(a2))
-        J1 = shared_cost
-        J2 = 1e4*ca.sumsqr(Slack)**2 + shared_cost
+        # for k in range(N):
+        #     shared_cost += 0.5*1e2*(ca.norm_2(x1[k,:]-x2[k,:]) - d)**2
+        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0.001*ca.sumsqr(a1)
+        J2 = 0.5*((1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1]))  + 0.001*ca.sumsqr(a2) + 1e5*ca.sumsqr(Slack)**2
         for iObs in range(len(Obstcles) if Obstcles is not None else 0):
             J2 += -0.5*avoid_Obs*ca.sumsqr(x2[N,:]- Obstcles[iObs]['Pos'] )
 

@@ -43,14 +43,14 @@ SCENARIOS: List[Scenario] = [
         theta_des=np.deg2rad(60.0),
         obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}],
     ),
-    Scenario(
-        name="Scenario_6_Switch_WithObs",
-        x1_init=np.array([[0.0, 0.0]]),
-        x2_init=np.array([[3.0, 0.0]]),
-        x1_des=np.array([[7.0, 4.0]]),
-        theta_des=np.deg2rad(240.0),
-        obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}],
-    ),
+    # Scenario(
+    #     name="Scenario_6_Switch_WithObs",
+    #     x1_init=np.array([[0.0, 0.0]]),
+    #     x2_init=np.array([[3.0, 0.0]]),
+    #     x1_des=np.array([[7.0, 4.0]]),
+    #     theta_des=np.deg2rad(240.0),
+    #     obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}],
+    # ),
 ]
 
 
@@ -480,7 +480,7 @@ def _rollout_task(args):
 def generate_solver_action_dataset(
     out_path: str = "solver_actions_dataset.npz",
     alphas: List[float] = (0.01, 0.5, 0.99),
-    episodes_per_scenario: int = 2,
+    episodes_per_scenario: int = 1,
     max_workers: int = None,
     num_random_scenarios: int = 4,
 ):
@@ -503,11 +503,16 @@ def generate_solver_action_dataset(
         max_workers = int(max(1, (os.cpu_count() or 2) / 2))
 
     demos = []
-    # Use processes to match prior PATH solver usage pattern
-    from concurrent.futures import ProcessPoolExecutor
-    with ProcessPoolExecutor(max_workers=max_workers) as ex:
-        for result in ex.map(_rollout_task, tasks):
-            demos.append(result)
+    if max_workers <= 1 or len(tasks) == 1:
+        # Single-threaded fallback
+        for task in tasks:
+            demos.append(_rollout_task(task))
+    else:
+        # Use processes to match prior PATH solver usage pattern
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            for result in ex.map(_rollout_task, tasks):
+                demos.append(result)
 
     obs = np.concatenate([d["obs"] for d in demos], axis=0)
     act_robot = np.concatenate([d["act_robot"] for d in demos], axis=0)
@@ -624,7 +629,7 @@ def train_from_dataset(
 
 if __name__ == "__main__":
     # To create a supervised dataset from the PATH solver, uncomment:
-    # generate_solver_action_dataset(out_path="solver_actions_dataset.npz", alphas=[0.05])
+    generate_solver_action_dataset(out_path="solver_actions_dataset.npz", alphas=[0.05], num_random_scenarios=1)
     # To run the quick RL training stub, comment the line above and uncomment below:
     # train(num_episodes=5)
     # To train from previously saved solver datasets:
