@@ -121,7 +121,7 @@ RT_Plot = True
 hist_col = ['c','m','k','y']
 
 Tf = 20.0
-alpha_vec = [0.05, 0.5]
+alpha_vec = [0.05, 0.25, 0.5]
 # alpha_vec = [0.05]
 
 N = 10
@@ -144,7 +144,7 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
-Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[-1-3/np.sqrt(2), 6-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
+Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[-1-3/np.sqrt(2), 6-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=250),
 # Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
@@ -407,7 +407,7 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
                 frame = capture_frame_agg(fig, canvas, w_target, h_target)
                 Frames.append(frame)
 
-        if EndSimulation or (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.05):
+        if EndSimulation or (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.1):
             EndSimulation = True
             if rt_plot:
                 for i in range(len(p12_line_pred)):
@@ -497,7 +497,7 @@ def run_scenario(Scenario: Scenario):
             mc_run_stats.append(run_single_mc(Scenario, alpha, mc_indices[0], enable_plot=True))
             mc_indices = mc_indices[1:]
         if mc_indices:
-            max_workers = max(1, min(len(mc_indices), (os.cpu_count() or 1) - 8))
+            max_workers = max(1, min(len(mc_indices), (int(os.cpu_count()/2) or 1) - 1))
             # Use spawn so Julia is initialized fresh per worker (fork + Julia can segfault/ReadOnlyMemoryError)
             with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
                 futures = [executor.submit(run_single_mc, Scenario, alpha, mc_idx, False) for mc_idx in mc_indices]
