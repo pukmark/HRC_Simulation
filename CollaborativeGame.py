@@ -117,10 +117,10 @@ def random_scenarios(
 
 RT_Plot = True
 
-hist_col = ['c','m','k','y']
+hist_col = ['c','m','k','y','r']
 
 Tf = 10.0
-alpha_vec = [0.05, 0.5]
+alpha_vec = [0.05, 0.25, 0.5, 0.75, 0.95]
 # alpha_vec = [0.05]
 
 N = 10
@@ -143,8 +143,8 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
-Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[-1-3/np.sqrt(2), 6-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[]),
-# Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
+Scenario(name="Scenario_1", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[]),
+# Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
@@ -154,7 +154,7 @@ Scenario(name="Scenario_1", x1_init=np.array([[-1.0, 6.0]]), x2_init=np.array([[
 
 Scenarios = Scenarios + random_scenarios(num=0)
 
-Human_PreDefined_Traj = True
+Human_PreDefined_Traj = False
 pp_theta = np.deg2rad(180.0)
 # pp_theta = np.atan2( (Scenarios[0].x1_des[0,1]-Scenarios[0].x1_init[0,1]), (Scenarios[0].x1_des[0,0]-Scenarios[0].x1_init[0,0]) )
 pp_factor = 0.5
@@ -175,18 +175,21 @@ def run_scenario(Scenario: Scenario):
     canvas = None
     w_target = h_target = None
     if RT_Plot:
-        fig = plt.figure(figsize=(FIG_INCHES, FIG_INCHES), dpi=DPI, constrained_layout=False)
-        ax_xy = plt.subplot2grid((2, 3), (0, 0), colspan=2, rowspan=2)
-        ax_xy.plot(x1_init[0, 0], x1_init[0, 1], 'gs', markersize=10, label='Human Start')
-        ax_xy.plot(x2_init[0, 0], x2_init[0, 1], 'bs', markersize=10, label='Robot Start')
-        ax_xy.plot(x1_des[0, 0], x1_des[0, 1], 'go', markersize=10, label='Human Target')
-        ax_xy.plot(x2_des[0, 0], x2_des[0, 1], 'bo', markersize=10, label='Robot Target')
-        p1_plot = ax_xy.plot([], [], 'gs', markersize=6, label='Human')[0]
-        p2_plot = ax_xy.plot([], [], 'bs', markersize=6, label='Robot')[0]
+        fig = plt.figure(figsize=(FIG_INCHES, FIG_INCHES), dpi=DPI, constrained_layout=True)
+        ax_xy = plt.subplot2grid((2, 3), (0, 0), colspan=2, rowspan=2, fig=fig)
+        ax_xy.plot(x1_init[0, 0], x1_init[0, 1], 'gs', markersize=6, label='Human Start')
+        ax_xy.plot(x2_init[0, 0], x2_init[0, 1], 'bs', markersize=6, label='Robot Start')
+        ax_xy.plot(x1_des[0, 0], x1_des[0, 1], 'go', markersize=6, label='Human Target')
+        ax_xy.plot(x2_des[0, 0], x2_des[0, 1], 'bo', markersize=6, label='Robot Target')
+        p1_plot = ax_xy.plot([], [], 'g^', markersize=6)[0]
+        p2_plot = ax_xy.plot([], [], 'b^', markersize=6)[0]
         p12_line = ax_xy.plot([], [], 'r-', linewidth=3)[0]
         p12_line_pred = []
         for _ in range(4):
             p12_line_pred.append(ax_xy.plot([], [], 'r:', linewidth=3)[0])
+        p12_line_hist = []
+        for _ in range(20):
+            p12_line_hist.append(ax_xy.plot([], [], 'r:', linewidth=3)[0])
         p1_pred = ax_xy.plot([], [], 'g-.', linewidth=3)[0]
         p2_pred = ax_xy.plot([], [], 'b-.', linewidth=3)[0]
         p1_hist = ax_xy.plot([], [], 'g-', linewidth=3)[0]
@@ -194,19 +197,19 @@ def run_scenario(Scenario: Scenario):
         tgt1_plot = ax_xy.plot([], [], 'go', markersize=6)[0]
         tgt2_plot = ax_xy.plot([], [], 'bo', markersize=6)[0]
         ax_xy.set_aspect('equal')
-        ax_xy.set_xlabel('x [m]')
-        ax_xy.set_ylabel('y [m]')
-        ax_xy.set_xlim([-5, 12])
-        ax_xy.set_ylim([-1, 10])
+        ax_xy.set_xlabel('X Position [m]')
+        ax_xy.set_ylabel('Y Position [m]')
+        ax_xy.set_xlim([-5, 10])
+        ax_xy.set_ylim([0, 10])
         ax_xy.grid(True)
         ax_xy.legend(ncol=4, loc='upper center', bbox_to_anchor=(0.5, 1.05))
         for Obstcle in Obstcles:
             x, y = Obstcle['diam'] / 2 * np.cos(np.linspace(0, 2 * np.pi, 100)), Obstcle['diam'] / 2 * np.sin(np.linspace(0, 2 * np.pi, 100))
             ax_xy.plot(Obstcle['Pos'][0, 0] + x, Obstcle['Pos'][0, 1] + y, 'k-', linewidth=3)
 
-        ax_vel = plt.subplot2grid((3, 3), (0, 2), colspan=1, rowspan=1)
-        p1_vel = ax_vel.plot([], [], 'gs', markersize=6, label='Human')[0]
-        p2_vel = ax_vel.plot([], [], 'bs', markersize=6, label='Robot')[0]
+        ax_vel = plt.subplot2grid((3, 3), (0, 2), colspan=1, rowspan=1, fig=fig)
+        p1_vel = ax_vel.plot([], [], 'gs', markersize=6)[0]
+        p2_vel = ax_vel.plot([], [], 'bs', markersize=6)[0]
         p1_vel_pred = ax_vel.plot([], [], 'g-.', markersize=3)[0]
         p2_vel_pred = ax_vel.plot([], [], 'b-.', markersize=3)[0]
         p1_vel_hist = ax_vel.plot([], [], 'g-', markersize=3)[0]
@@ -216,11 +219,9 @@ def run_scenario(Scenario: Scenario):
         ax_vel.plot([0, Tf], [GameSol.v1_max, GameSol.v1_max], 'g:', markersize=3)
         ax_vel.plot([0, Tf], [GameSol.v2_max, GameSol.v2_max], 'b:', markersize=3)
         ax_vel.grid(True)
-        ax_vel.legend()
-        ax_vel.set_xlabel('Time [Sec]')
-        ax_vel.set_ylabel('Velocity [m/s]')
+        ax_vel.set_title('Velocity [m/s]')
 
-        ax_acc = plt.subplot2grid((3, 3), (1, 2), colspan=1, rowspan=1)
+        ax_acc = plt.subplot2grid((3, 3), (1, 2), colspan=1, rowspan=1, fig=fig)
         p1_acc = ax_acc.plot([], [], 'gs', markersize=6)[0]
         p2_acc = ax_acc.plot([], [], 'bs', markersize=6)[0]
         p1_acc_pred = ax_acc.plot([], [], 'g-.', markersize=3)[0]
@@ -233,10 +234,9 @@ def run_scenario(Scenario: Scenario):
         ax_acc.plot([0, Tf], [GameSol.a2_max, GameSol.a2_max], 'b:', markersize=3)
         ax_acc.grid(True)
         # ax_acc.legend()
-        ax_acc.set_xlabel('Time [Sec]')
-        ax_acc.set_ylabel('Acceleration [m/s^2]')
+        ax_acc.set_title('Acceleration [m/s^2]')
 
-        ax_dist = plt.subplot2grid((3, 3), (2, 2), colspan=1, rowspan=1)
+        ax_dist = plt.subplot2grid((3, 3), (2, 2), colspan=1, rowspan=1, fig=fig)
         p12_dist = ax_dist.plot([], [], 'rs', markersize=6)[0]
         p12_dist_pred = ax_dist.plot([], [], 'b-', markersize=3)[0]
         p12_dist_hist = ax_dist.plot([], [], 'b-.', markersize=3)[0]
@@ -246,7 +246,7 @@ def run_scenario(Scenario: Scenario):
         ax_dist.set_ylim([GameSol.d_min - 2*GameSol.delta_d, GameSol.d_max + 2*GameSol.delta_d])
         ax_dist.grid(True)
         ax_dist.set_xlabel('Time [Sec]')
-        ax_dist.set_ylabel('Distance [m]')
+        ax_dist.set_title('Distance [m]')
 
         canvas = FigureCanvas(fig)
         w_target = int(FIG_INCHES * DPI)
@@ -402,12 +402,13 @@ def run_scenario(Scenario: Scenario):
                     p12_dist_hist.set_data(t_hist[:, 0], np.linalg.norm(x1_hist - x2_hist, axis=1))
                     
                     if t_hist.shape[0] % 10 == 0:
-                        ax_xy.plot([x1_state[0, 0], x2_state[0,0]], [x1_state[0, 1], x2_state[0, 1]], 'r-', linewidth=1)
+                        k = t_hist.shape[0]//10-1
+                        p12_line_hist[i].set_data([x1_hist[-1, 0], x2_hist[-1, 0]], [x1_hist[-1, 1], x2_hist[-1, 1]])
 
                     plt.pause(0.1)
 
                     fig.canvas.draw()
-                    if RT_Plot and n_mc == 1:
+                    if RT_Plot and n_mc == 0:
                         frame = capture_frame_agg(fig, canvas, w_target, h_target)
                         Frames.append(frame)
                 else:
@@ -428,24 +429,48 @@ def run_scenario(Scenario: Scenario):
                     EndSimulation = True
                     for i in range(len(p12_line_pred)):
                         p12_line_pred[i].set_data([], [])
+                    for i in range(len(p12_line_hist)):
+                        p12_line_hist[i].set_data([], [])
                     
                     if fig is not None: fig.savefig(f"{Scenario.name}_traj_final.png")
-                    if RT_Plot and n_mc == 1:
+                    if RT_Plot and n_mc == 0:
                         ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2, label=f'alpha={alpha}')
-                        ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '-', color=hist_col[ialpha], linewidth=2)
+                        ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], '--', color=hist_col[ialpha], linewidth=2)
                         ax_xy.legend(ncol=4, loc='upper center')
-                        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
-                        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_xy.set_title('Trajectories')
+                        if ialpha == 0:
+                            ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2, label='Human')
+                            ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '--', color=hist_col[ialpha], linewidth=2, label='Robot')
+                        else:
+                            ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                            ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), '--', color=hist_col[ialpha], linewidth=2)
+                        
+                        p1_vel.set_data([], [])
+                        p2_vel.set_data([], [])
+                        p1_vel_pred.set_data([], [])
+                        p2_vel_pred.set_data([], [])
+                        ax_vel.legend()    
                         ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
-                        ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
+                        ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), '--', color=hist_col[ialpha], linewidth=2)
                         ax_dist.plot(t_hist, np.linalg.norm(x1_hist - x2_hist, axis=1), '-', color=hist_col[ialpha], linewidth=2)
                         p1_pred.set_data([], [])
                         p2_pred.set_data([], [])
                         p1_hist.set_data([], [])
                         p2_hist.set_data([], [])
+                        p1_vel_pred.set_data([], [])
+                        p2_vel_pred.set_data([], [])
+                        p1_vel_hist.set_data([], [])
+                        p2_vel_hist.set_data([], [])
+                        p1_vel.set_data([], [])
+                        p2_vel.set_data([], [])
+                        p1_acc_pred.set_data([], [])
+                        p2_acc_pred.set_data([], [])
+                        p1_acc.set_data([], [])
+                        p2_acc.set_data([], [])
+                        p12_dist_pred.set_data([], [])
                         
                         for k in range(9, np.shape(x1_hist)[0]-1, 10):
-                            ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], '-', color=hist_col[ialpha], linewidth=1)
+                            ax_xy.plot([x1_hist[k, 0], x2_hist[k, 0]], [x1_hist[k, 1], x2_hist[k, 1]], ':', color=hist_col[ialpha], linewidth=1)
                         if fig is not None: fig.savefig(f"{Scenario.name}_final.png")
 
             dist_series = np.linalg.norm(x1_hist - x2_hist, axis=1)
@@ -501,7 +526,7 @@ def run_scenario(Scenario: Scenario):
             writer.close()
         plt.close(fig)
 
-    if mc_run_stats:
+    if mc_run_stats and Scenario.Nmc > 1:
         header = ",".join(
             [
                 "alpha",
