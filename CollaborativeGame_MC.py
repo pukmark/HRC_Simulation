@@ -494,12 +494,10 @@ def run_scenario(Scenario: Scenario):
     for alpha in alpha_vec:
         mc_indices = list(range(Scenario.Nmc))
         # Plot the first few MC runs (up to 4); color the first nominal differently
-        plot_runs = mc_indices[:4]
-        plot_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
-        for idx, mc_idx in enumerate(plot_runs):
-            color = plot_colors[idx if idx < len(plot_colors) else -1]
-            mc_run_stats.append(run_single_mc(Scenario, alpha, mc_idx, enable_plot=True, plot_color=color))
-        mc_indices = mc_indices[len(plot_runs):]
+        # plot_runs = mc_indices[0]
+        # plot_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+        # mc_run_stats.append(run_single_mc(Scenario, alpha, 0, enable_plot=True, plot_color=plot_colors[0]))
+        # mc_indices = mc_indices[len(plot_runs):]
         if mc_indices:
             max_workers = max(1, min(len(mc_indices), (int(os.cpu_count()/2) or 1) - 1))
             # Use spawn so Julia is initialized fresh per worker (fork + Julia can segfault/ReadOnlyMemoryError)
