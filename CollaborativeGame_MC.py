@@ -334,7 +334,16 @@ def run_single_mc(Scenario: Scenario, alpha: float, n_mc: int, enable_plot: bool
         else:
             a1_cmd = GameSol.sol.a1_sol[i_acc, :]
         if n_mc > 0:
-            a1_cmd += 1.0 * np.random.normal(0.0, 1.0, 2)
+            a1_cmd += 2.0 * np.random.normal(0.0, 1.0, 2)
+            
+        if Scenario.obstacles and Human_PreDefined_Traj:
+            for Obstcle in Scenario.obstacles:
+                dist_to_obs = np.linalg.norm(x1_state - Obstcle['Pos']) - Obstcle['diam']/2
+                if dist_to_obs < 0.5:
+                    r_obs = (x1_state - Obstcle['Pos']) / (np.linalg.norm(x1_state - Obstcle['Pos']) + 1e-6)
+                    a1_cmd = a1_cmd - np.dot(a1_cmd[0,:], r_obs[0,:]) * r_obs
+                if dist_to_obs < 0.25:
+                    a1_cmd += GameSol.a1_max/2 * r_obs * (0.25 - dist_to_obs) / 0.25
         
         a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
         a2_cmd = LimitedCmd(GameSol.sol.a2_sol[i_acc, :], GameSol.a2_max)
