@@ -7,10 +7,9 @@ __pycache__/
 # Simulation result/output folders
 outputs/
 results/
-videos/
 plots/
-*.mp4
 *.gif
+*.png
 
 # Virtual environment
 venv/
