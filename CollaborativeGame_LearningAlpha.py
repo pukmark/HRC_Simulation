@@ -18,6 +18,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Tuple
+import sys
 
 
 
@@ -176,6 +177,12 @@ def run_single_mc(
     SolverType: str,
     plot_context: Dict | None = None,
 ):
+    # Some environments mark stdout as non-blocking in subprocesses; force blocking to avoid spurious errors.
+    try:
+        os.set_blocking(sys.stdout.fileno(), True)
+    except (AttributeError, OSError, ValueError):
+        pass
+
     np.random.seed(100 + n_mc)
     x1_init, x2_init, x1_des, theta_des = Scenario.x1_init, Scenario.x2_init, Scenario.x1_des, Scenario.theta_des
     Obstcles = Scenario.obstacles
@@ -389,7 +396,11 @@ def run_single_mc(
         p_sigOA = plot_context['p_sigOA']
         Frames = plot_context['Frames']
 
-    print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}")
+    try:
+        print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}", flush=True)
+    except (BlockingIOError, BrokenPipeError):
+        # Skip logging if stdout is still non-blocking for any reason.
+        pass
     t = 0.0
     t_hist = np.array([[t]])
     x1_hist, v1_hist, a1_hist = x1_init, np.zeros((1, 2)), np.zeros((0, 2))
@@ -512,7 +523,7 @@ def run_single_mc(
         else:
             a1_cmd = GameSol.sol.a1[i_acc, :]
         if n_mc >= 1:
-            a1_cmd += 1.5 * np.random.normal(0.0, 1.0, 2)
+            a1_cmd += 1.0 * np.random.normal(0.0, 1.0, 2)
                         
         if Scenario.obstacles and Human_PreDefined_Traj:
             for Obstcle in Scenario.obstacles:
