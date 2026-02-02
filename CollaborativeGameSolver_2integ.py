@@ -27,7 +27,7 @@ To use this solver, install the prerequisites using the following steps
 
 
 class CollaborativeGame():
-    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.05, Obstcles: list = None, verbose: int = 0):
+    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.01, Obstcles: list = None, verbose: int = 0):
         self.N = N
         self.dt = dt
         self.verbose = verbose
@@ -54,12 +54,9 @@ class CollaborativeGame():
         alpha = ca.SX.sym('alpha')
         beta = ca.SX.sym('beta')
         SlackL = ca.SX.sym('Slack', N)
-        Confidence = ca.SX.sym('Confidence')
-        
-        a_confidence_factor = 1.0 + np.linspace(2, 0.0, N)*(1.0 - Confidence)**2.0  # from Confidence to 2-Confidence
 
-        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0.1*ca.sumsqr(a_confidence_factor*a1)
-        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1])) + 0.1*ca.sumsqr(a2) + 1e3*ca.sumsqr(SlackL)
+        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0.1*ca.sumsqr(a1)
+        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1])) + 0.1*ca.sumsqr(a2) + 1e4*ca.sumsqr(SlackL)
         
         # Obstacle avoidance term
         w_obs = 0.0      # tune this (1–50 typical)
@@ -199,9 +196,9 @@ class CollaborativeGame():
 
         # Define the F and J functions
         F = ca.vertcat(*_Dxu_L, *_Ch, *_Cgp, _Cgs)
-        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, Confidence], [F])
+        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta], [F])
         J = ca.jacobian(F, self.Z)
-        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, Confidence], [J])
+        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta], [J])
 
         self.n_l_inf = 0
         self.n_l_inf += np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
@@ -210,15 +207,13 @@ class CollaborativeGame():
 
         self.z0 = np.zeros((self.Z.shape[0],))
 
-        self.confidence = 1.0
-
         self.p_tol = 1e-4
         
         self.nms = 1
 
         self.success = False
         
-        self.sumJ_fun = ca.Function('sumJ', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, Confidence], [J1 + J2])
+        self.sumJ_fun = ca.Function('sumJ', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f], [J1 + J2])
         self.fun_x1 = ca.Function('x1', [self.Z], [x1])
         self.fun_x2 = ca.Function('x2', [self.Z], [x2])
         self.fun_v1 = ca.Function('v1', [self.Z], [v1])
@@ -252,9 +247,7 @@ class CollaborativeGame():
         self.sol.lam2 = self.fun_lam2(self.z0).toarray().reshape(self.N,-1)
         self.sol.sigL = self.fun_sigL(self.z0).toarray().reshape(self.N,-1)
         self.sol.sigOA = self.fun_sigOA(self.z0).toarray().reshape(self.N,-1)
-        self.sol.confidence = self.confidence
         self.sol.z = self.z0
-        
 
         self.MPC_guess_human_init()
         self.MPC_guess_robot_init()
@@ -262,10 +255,6 @@ class CollaborativeGame():
 
 
     def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, z0 = None, log: bool = True):
-
-        # Update Confidence:
-        err_dist = max(0.0, abs(np.linalg.norm(x1_0 - x2_0) - self.d) - self.delta_d)
-        self.confidence = np.clip(self.confidence + 0.05 - 0.05*err_dist/self.delta_d, 0.0, 1.0)
 
         if z0 is not None:
             self.z0 = z0
@@ -278,8 +267,8 @@ class CollaborativeGame():
         # Main.nnz = self.J.sparsity_out(0).nnz()
         Main.nnz = self.fun_J.numel_out(0)
 
-        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
-        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence))
+        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta)).squeeze()
+        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta))
 
         Main.tol = self.p_tol
 
@@ -364,7 +353,7 @@ class CollaborativeGame():
             self.z0 = z
 
 
-        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
+        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta)).squeeze()
         n_xu = np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
         _g = -_f[n_xu:]
         _l = z[n_xu:]
@@ -389,13 +378,12 @@ class CollaborativeGame():
             self.sol.lam2 = self.fun_lam2(z).toarray().reshape(self.N,-1)
             self.sol.sigL = self.fun_sigL(z).toarray().reshape(self.N,-1)
             self.sol.sigOA = self.fun_sigOA(z).toarray().reshape(self.N,-1)
-            self.sol.confidence = self.confidence
             self.sol.z = z
 
 
         if log:
             try:
-                print(f'Time: {self.sol.time:.2f}s | {self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(np.abs(self.sol.Slack)):.4e} | Confidence: {self.confidence:.2f}')
+                print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(np.abs(self.sol.Slack)):.4e}')
             except BlockingIOError:
                 # Avoid crashing if stdout pipe is saturated (e.g., headless workers).
                 pass
@@ -701,7 +689,7 @@ class CollaborativeGame():
 
         return
 
-    def Centralized_MPC_calc(self, time, x1_0, v1_0, x1_tgt, x2_0, v2_0, x2_tgt, alpha):
+    def Centralized_MPC_calc(self, x1_0, v1_0, x1_tgt, x2_0, v2_0, x2_tgt, alpha):
 
         self.centralized_mpc.opti.set_value(self.centralized_mpc.x1_0, x1_0)
         self.centralized_mpc.opti.set_value(self.centralized_mpc.v1_0, v1_0)
@@ -762,7 +750,6 @@ class CollaborativeGame():
             plt.pause(0.1)
             
         self.Centralized_MPC_sol = SimpleNamespace()
-        self.Centralized_MPC_sol.time = time
         self.Centralized_MPC_sol.x1 = x1_sol
         self.Centralized_MPC_sol.v1 = v1_sol
         self.Centralized_MPC_sol.a1 = a1_sol
@@ -770,26 +757,5 @@ class CollaborativeGame():
         self.Centralized_MPC_sol.v2 = v2_sol
         self.Centralized_MPC_sol.a2 = a2_sol
         self.Centralized_MPC_sol.Slack = Slack_sol
-        self.Centralized_MPC_sol.alpha = alpha
-        self.Centralized_MPC_sol.beta = 0.0
 
         return x1_sol, v1_sol, a1_sol, x2_sol, v2_sol, a2_sol, Slack_sol
-    
-    def calc_init_guess_from_input(self, x1_0, v1_0, x2_0, v2_0, a1, a2):
-        x1_guess = np.zeros((self.N+1, self.n_dim))
-        v1_guess = np.zeros((self.N+1, self.n_dim))
-        x2_guess = np.zeros((self.N+1, self.n_dim))
-        v2_guess = np.zeros((self.N+1, self.n_dim))
-
-        x1_guess[0,:] = x1_0
-        v1_guess[0,:] = v1_0
-        x2_guess[0,:] = x2_0
-        v2_guess[0,:] = v2_0
-
-        for k in range(self.N):
-            v1_guess[k+1,:] = v1_guess[k,:] + self.dt*a1[min(k, a1.shape[0]-1),:]
-            x1_guess[k+1,:] = x1_guess[k,:] + self.dt*v1_guess[k,:] + 0.5*self.dt**2*a1[min(k, a1.shape[0]-1),:]
-            v2_guess[k+1,:] = v2_guess[k,:] + self.dt*a2[min(k, a2.shape[0]-1),:]
-            x2_guess[k+1,:] = x2_guess[k,:] + self.dt*v2_guess[k,:] + 0.5*self.dt**2*a2[min(k, a2.shape[0]-1),:]
-
-        return x1_guess, v1_guess, x2_guess, v2_guess

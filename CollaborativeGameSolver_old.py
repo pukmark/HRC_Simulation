@@ -5,12 +5,6 @@ import casadi as ca
 from types import SimpleNamespace
 import matplotlib.pyplot as plt
 
-from julia.api import Julia
-jl = Julia(compiled_modules=False)
-from julia import Main
-jl.using("PyCall")
-jl.using("PATHSolver")
-
 """
 To use this solver, install the prerequisites using the following steps
 1. Install Julia:
@@ -27,7 +21,7 @@ To use this solver, install the prerequisites using the following steps
 
 
 class CollaborativeGame():
-    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.05, Obstcles: list = None, verbose: int = 0):
+    def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.01, Obstcles: list = None, verbose: int = 0):
         self.N = N
         self.dt = dt
         self.verbose = verbose
@@ -37,10 +31,10 @@ class CollaborativeGame():
         self.delta_d = delta_d
 
         self.d_min, self.d_max = d-delta_d, d+delta_d
-        self.v1_max = 2.0
-        self.a1_max = 10.0
-        self.v2_max = 5.0
-        self.a2_max = 20.0
+        self.v1_max = 1.5
+        self.a1_max = 1.0
+        self.v2_max = 3.0
+        self.a2_max = 10.0
         self.xlim = [-10.0, 10.0]
         self.ylim = [-10.0, 10.0]
 
@@ -54,16 +48,19 @@ class CollaborativeGame():
         alpha = ca.SX.sym('alpha')
         beta = ca.SX.sym('beta')
         SlackL = ca.SX.sym('Slack', N)
-        Confidence = ca.SX.sym('Confidence')
-        
-        a_confidence_factor = 1.0 + np.linspace(2, 0.0, N)*(1.0 - Confidence)**2.0  # from Confidence to 2-Confidence
+        Slack_OA = ca.SX.sym('Slack_OA', N)
+        avoid_Obs = ca.SX.sym('avoid_Obs',1)
 
-        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0.1*ca.sumsqr(a_confidence_factor*a1)
-        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1])) + 0.1*ca.sumsqr(a2) + 1e3*ca.sumsqr(SlackL)
+        J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0*0.5*0.5*ca.sumsqr(v1) + 0.1*ca.sumsqr(a1)
+        # J2 = 0.5*(((1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1])) + 0.5*0.1*ca.sumsqr(v2)  + 0.1*ca.sumsqr(a2)) + 1e5*ca.sumsqr(SlackL) + 1e5*ca.sumsqr(Slack_OA)
+        J2 = 0.5*(((1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1])) + 0.5*0.1*ca.sumsqr(v2)*0  + 0.1*ca.sumsqr(a2)) + 1e5*ca.sum(SlackL) + 1e5*ca.sum(Slack_OA)
+        # J2 = 0.5*(((1.0-avoid_Obs)*ca.sumsqr(x2[:,0]-x2_f[0]) + (1.0-avoid_Obs)*ca.sumsqr(x2[:,1]-x2_f[1]))  + 0.001*ca.sumsqr(a2)) + 1e5*ca.sumsqr(Slack)
+        # for iObs in range(len(Obstcles) if Obstcles is not None else 0):
+        #     J2 += -0.5*avoid_Obs*ca.sumsqr(x2[N,:]- Obstcles[iObs]['Pos'] )
         
-        # Obstacle avoidance term
-        w_obs = 0.0      # tune this (1–50 typical)
+        w_obs = 0.1      # tune this (1–50 typical)
         eps   = 1e-3     # numerical safety
+
         for k in range(N+1):
             if Obstcles is not None:
                 for Obstcle in Obstcles:
@@ -99,11 +96,11 @@ class CollaborativeGame():
         pc1 = []
         for k in range(N):
             pc1.append(self.v1_max**2 - ca.sumsqr(v1[k+1,:]))
-            # pc1.append(self.a1_max**2 - ca.sumsqr(a1[k,:]))
-            # pc1.append(x1[k+1,0]-self.xlim[0])
-            # pc1.append(self.xlim[1]-x1[k+1,0])
-            # pc1.append(x1[k+1,1]-self.ylim[0])
-            # pc1.append(self.ylim[1]-x1[k+1,1])
+            pc1.append(self.a1_max**2 - ca.sumsqr(a1[k,:]))
+            pc1.append(x1[k+1,:]-self.xlim[0])
+            pc1.append(self.xlim[1]-x1[k+1,:])
+            pc1.append(x1[k+1,1]-self.ylim[0])
+            pc1.append(self.ylim[1]-x1[k+1,1])
         pc1 = ca.horzcat(*pc1).T
         lam1 = ca.SX.sym('lam1', pc1.shape[0])
         L1 -= ca.dot(lam1, pc1)
@@ -126,11 +123,12 @@ class CollaborativeGame():
         for k in range(N):
             pc2.append(self.v2_max**2 - ca.sumsqr(v2[k+1,:]))
             pc2.append(self.a2_max**2 - ca.sumsqr(a2[k,:]))
-            # pc2.append(x2[k+1,0]-self.xlim[0])
-            # pc2.append(self.xlim[1]-x2[k+1,0])
-            # pc2.append(x2[k+1,1]-self.ylim[0])
-            # pc2.append(self.ylim[1]-x2[k+1,1])
-            # pc2.append(SlackL[k])  # Slack variable >=0
+            pc2.append(x2[k+1,:]-self.xlim[0])
+            pc2.append(self.xlim[1]-x2[k+1,:])
+            pc2.append(x2[k+1,1]-self.ylim[0])
+            pc2.append(self.ylim[1]-x2[k+1,1])
+            pc2.append(SlackL[k])  # Slack variable >=0
+            pc2.append(Slack_OA[k])  # Slack variable >=0
         pc2 = ca.horzcat(*pc2).T
         lam2 = ca.SX.sym('lam2', pc2.shape[0])
         L2 -= ca.dot(lam2, pc2)
@@ -144,24 +142,25 @@ class CollaborativeGame():
             scL_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2 - SlackL[k]**2) # (x1-x2)**2 - d_min**2 >=0
             if Obstcles is not None:
                 for iObs, Obstcle in enumerate(Obstcles):
-                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/5)))
+                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
                     for factor in factors:
-                        scOA_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:] - Obstcle['Pos']) - (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
+                        scOA_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:]-Obstcle['Pos']) - (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
+                        # scOA_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:]-Obstcle['Pos']) - (Obstcle['diam']/2)**2 - Slack_OA[k]**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
         scL_vec = ca.horzcat(*scL_vec).T
         scOA_vec = ca.horzcat(*scOA_vec).T
-        sigL = ca.SX.sym('sc1', scL_vec.shape[0])
-        sigOA = ca.SX.sym('sc2', scOA_vec.shape[0])
+        sig1 = ca.SX.sym('sc1', scL_vec.shape[0])
+        sig2 = ca.SX.sym('sc2', scOA_vec.shape[0])
 
-        L1 -= alpha*ca.dot(sigL, scL_vec)
-        L2 -= (1-alpha)*ca.dot(sigL, scL_vec)
-        L1 -= beta*ca.dot(sigOA, scOA_vec)
-        L2 -= (1-beta)*ca.dot(sigOA, scOA_vec)
+        L1 -= alpha*ca.dot(sig1, scL_vec)
+        L2 -= (1-alpha)*ca.dot(sig1, scL_vec)
+        L1 -= beta*ca.dot(sig2, scOA_vec)
+        L2 -= (1-beta)*ca.dot(sig2, scOA_vec)
         
         sc_vec = ca.vertcat(scL_vec, scOA_vec)
-        sig = ca.vertcat(sigL, sigOA)
+        sig = ca.vertcat(sig1, sig2)
 
-        self.Z = ca.vertcat(x1[:], v1[:], a1[:], x2[:], v2[:], a2[:], SlackL[:], mu1[:], mu2[:], lam1[:], lam2[:], sig[:])
-        self.Z_len = [[2*N+2, 2*N+2, 2*N], [2*N+2, 2*N+2, 2*N, N], mu1.shape[0]+mu2.shape[0], pc1.shape[0]+pc2.shape[0], sig.shape[0]]
+        self.Z = ca.vertcat(x1[:], v1[:], a1[:], x2[:], v2[:], a2[:], SlackL[:], Slack_OA[:], mu1[:], mu2[:], lam1[:], lam2[:], sig[:])
+        self.Z_len = [[2*N+2, 2*N+2, 2*N], [2*N+2, 2*N+2, 2*N, N, N], mu1.shape[0]+mu2.shape[0], pc1.shape[0]+pc2.shape[0], sig.shape[0]]
 
         self.indx_x1 = 0
         self.indx_y1 = self.indx_x1 + N+1
@@ -175,15 +174,9 @@ class CollaborativeGame():
         self.indx_vy2 = self.indx_vx2 + N+1
         self.indx_ax2 = self.indx_vy2 + N+1
         self.indx_ay2 = self.indx_ax2 + N+1
-        self.indx_lam1 = self.indx_ay2+ pc1.shape[0]
-        self.indx_lam2 = self.indx_lam1 + pc2.shape[0]
-        self.indx_sigL = self.indx_lam2 + sigL.shape[0]
-        self.indx_sigOA = self.indx_sigL + sigOA.shape[0]
-        self.lam1_len = pc1.shape[0]
-        self.lam2_len = pc2.shape[0]
-        self.sigL_len = sigL.shape[0]
-        self.sigOA_len = sigOA.shape[0]
-        
+        self.pc1_len = pc1.shape[0]
+        self.pc2_len = pc2.shape[0]
+        self.sig_len = sig.shape[0]
 
         _Dxu_L = []
         _Ch = []
@@ -191,7 +184,7 @@ class CollaborativeGame():
         _Cgs = []
 
         _Dxu_L.append( ca.jacobian(L1, ca.vertcat(x1[:], v1[:], a1[:])).T )
-        _Dxu_L.append( ca.jacobian(L2, ca.vertcat(x2[:], v2[:], a2[:], SlackL[:])).T )
+        _Dxu_L.append( ca.jacobian(L2, ca.vertcat(x2[:], v2[:], a2[:], SlackL[:], Slack_OA[:])).T )
         # _Dxu_L.append( ca.jacobian(L2, ca.vertcat(x2[:], v2[:], a2[:], Slack[:])).T )
         _Ch = h_vec
         _Cgp = pc_vec
@@ -199,9 +192,9 @@ class CollaborativeGame():
 
         # Define the F and J functions
         F = ca.vertcat(*_Dxu_L, *_Ch, *_Cgp, _Cgs)
-        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, Confidence], [F])
+        self.fun_F = ca.Function('F', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, avoid_Obs], [F])
         J = ca.jacobian(F, self.Z)
-        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, Confidence], [J])
+        self.fun_J = ca.Function('J', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, avoid_Obs], [J])
 
         self.n_l_inf = 0
         self.n_l_inf += np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
@@ -210,62 +203,42 @@ class CollaborativeGame():
 
         self.z0 = np.zeros((self.Z.shape[0],))
 
-        self.confidence = 1.0
-
-        self.p_tol = 1e-4
+        self.p_tol = 1e-3
         
         self.nms = 1
 
         self.success = False
         
-        self.sumJ_fun = ca.Function('sumJ', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, Confidence], [J1 + J2])
-        self.fun_x1 = ca.Function('x1', [self.Z], [x1])
-        self.fun_x2 = ca.Function('x2', [self.Z], [x2])
-        self.fun_v1 = ca.Function('v1', [self.Z], [v1])
-        self.fun_v2 = ca.Function('v2', [self.Z], [v2])
-        self.fun_a1 = ca.Function('a1', [self.Z], [a1])
-        self.fun_a2 = ca.Function('a2', [self.Z], [a2])
-        self.fun_slackL = ca.Function('SlackL', [self.Z], [SlackL])
-        self.fun_mu1 = ca.Function('mu1', [self.Z], [mu1])
-        self.fun_mu2 = ca.Function('mu2', [self.Z], [mu2])
-        self.fun_pc1 = ca.Function('pc1', [self.Z], [pc1])
-        self.fun_pc2 = ca.Function('pc2', [self.Z], [pc2])
-        self.fun_scL = ca.Function('scL', [self.Z], [scL_vec])
-        self.fun_scOA = ca.Function('scOA', [self.Z], [scOA_vec])
-        self.fun_lam1 = ca.Function('lam1', [self.Z], [lam1])
-        self.fun_lam2 = ca.Function('lam2', [self.Z], [lam2])
-        self.fun_sigL = ca.Function('sigL', [self.Z], [sigL])
-        self.fun_sigOA = ca.Function('sigOA', [self.Z], [sigOA])
-
+        self.sumJ_fun = ca.Function('sumJ', [self.Z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, avoid_Obs], [J1 + J2])
+        
         self.sol = SimpleNamespace()
         self.sol.time = -1.0
-        self.sol.x1 = self.fun_x1(self.z0).toarray()
-        self.sol.x2 = self.fun_x2(self.z0).toarray()
-        self.sol.v1 = self.fun_v1(self.z0).toarray()
-        self.sol.v2 = self.fun_v2(self.z0).toarray()
-        self.sol.a1 = self.fun_a1(self.z0).toarray()
-        self.sol.a2 = self.fun_a2(self.z0).toarray()
-        self.sol.Slack = self.fun_slackL(self.z0).toarray().reshape(self.N,-1)
-        self.sol.mu1 = self.fun_mu1(self.z0).toarray().reshape(self.N+1,-1)
-        self.sol.mu2 = self.fun_mu2(self.z0).toarray().reshape(self.N+1,-1)
-        self.sol.lam1 = self.fun_lam1(self.z0).toarray().reshape(self.N,-1)
-        self.sol.lam2 = self.fun_lam2(self.z0).toarray().reshape(self.N,-1)
-        self.sol.sigL = self.fun_sigL(self.z0).toarray().reshape(self.N,-1)
-        self.sol.sigOA = self.fun_sigOA(self.z0).toarray().reshape(self.N,-1)
-        self.sol.confidence = self.confidence
-        self.sol.z = self.z0
-        
+        self.sol.x1_sol = (self.z0[:2*self.N+2]).reshape(2,-1).T; indx = 2*(self.N+1)
+        self.sol.v1_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.a1_sol = (self.z0[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+        self.sol.x2_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.v2_sol = (self.z0[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+        self.sol.a2_sol = (self.z0[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+        self.sol.Slack = self.z0[indx:indx+self.N]; indx += self.N
+        self.sol.Slack_OA = self.z0[indx:indx+self.N]; indx += self.N
+        self.sol.mu1 = self.z0[indx:indx+2*self.N+2]; indx += 2*(self.N+1)
+        self.sol.mu2 = self.z0[indx:indx+2*self.N+2]; indx += 2*(self.N+1)
+        self.sol.lam1 = self.z0[indx:indx+pc1.shape[0]]; indx += pc1.shape[0]
+        self.sol.lam2 = self.z0[indx:indx+pc2.shape[0]]; indx += pc2.shape[0]
+        self.sig = self.z0[indx:indx+sig.shape[0]]; indx += sig.shape[0]
 
         self.MPC_guess_human_init()
         self.MPC_guess_robot_init()
         self.Centralized_MPC_init()
 
 
-    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, z0 = None, log: bool = True):
+    def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, z0 = None, avoid_Obs = 0.0, log: bool = True):
 
-        # Update Confidence:
-        err_dist = max(0.0, abs(np.linalg.norm(x1_0 - x2_0) - self.d) - self.delta_d)
-        self.confidence = np.clip(self.confidence + 0.05 - 0.05*err_dist/self.delta_d, 0.0, 1.0)
+        from julia.api import Julia
+        jl = Julia(compiled_modules=False)
+        from julia import Main
+        jl.using("PyCall")
+        jl.using("PATHSolver")
 
         if z0 is not None:
             self.z0 = z0
@@ -278,8 +251,8 @@ class CollaborativeGame():
         # Main.nnz = self.J.sparsity_out(0).nnz()
         Main.nnz = self.fun_J.numel_out(0)
 
-        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
-        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence))
+        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, avoid_Obs)).squeeze()
+        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, avoid_Obs))
 
         Main.tol = self.p_tol
 
@@ -364,7 +337,7 @@ class CollaborativeGame():
             self.z0 = z
 
 
-        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
+        _f = np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, avoid_Obs)).squeeze()
         n_xu = np.sum(self.Z_len[0]) + np.sum(self.Z_len[1])
         _g = -_f[n_xu:]
         _l = z[n_xu:]
@@ -376,31 +349,28 @@ class CollaborativeGame():
             self.sol.time = time
             self.sol.alpha = alpha
             self.sol.beta = beta
-            self.sol.x1 = self.fun_x1(z).toarray()
-            self.sol.x2 = self.fun_x2(z).toarray()
-            self.sol.v1 = self.fun_v1(z).toarray()
-            self.sol.v2 = self.fun_v2(z).toarray()
-            self.sol.a1 = self.fun_a1(z).toarray()
-            self.sol.a2 = self.fun_a2(z).toarray()
-            self.sol.Slack = self.fun_slackL(z).toarray().reshape(self.N,-1)
-            self.sol.mu1 = self.fun_mu1(z).toarray().reshape(self.N+1,-1)
-            self.sol.mu2 = self.fun_mu2(z).toarray().reshape(self.N+1,-1)
-            self.sol.lam1 = self.fun_lam1(z).toarray().reshape(self.N,-1)
-            self.sol.lam2 = self.fun_lam2(z).toarray().reshape(self.N,-1)
-            self.sol.sigL = self.fun_sigL(z).toarray().reshape(self.N,-1)
-            self.sol.sigOA = self.fun_sigOA(z).toarray().reshape(self.N,-1)
-            self.sol.confidence = self.confidence
-            self.sol.z = z
-
+            self.sol.x1_sol = (z[:2*self.N+2]).reshape(2,-1).T; indx = 2*(self.N+1)
+            self.sol.v1_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+            self.sol.a1_sol = (z[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+            self.sol.x2_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+            self.sol.v2_sol = (z[indx:indx+2*self.N+2]).reshape(2,-1).T; indx += 2*(self.N+1)
+            self.sol.a2_sol = (z[indx:indx+2*self.N]).reshape(2,-1).T; indx += 2*self.N
+            self.sol.Slack = z[indx:indx+self.N]; indx += self.N
+            self.sol.Slack_OA = self.z0[indx:indx+self.N]; indx += self.N
+            self.sol.mu1 = self.z0[indx:indx+2*self.N+2]; indx += 2*(self.N+1)
+            self.sol.mu2 = self.z0[indx:indx+2*self.N+2]; indx += 2*(self.N+1)
+            self.sol.lam1 = self.z0[indx:indx+self.pc1_len]; indx += self.pc1_len
+            self.sol.lam2 = self.z0[indx:indx+self.pc2_len]; indx += self.pc2_len
+            self.sol.sig = self.z0[indx:indx+self.sig_len]; indx += self.sig_len
 
         if log:
             try:
-                print(f'Time: {self.sol.time:.2f}s | {self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(np.abs(self.sol.Slack)):.4e} | Confidence: {self.confidence:.2f}')
+                print(f'{self.status_msg} - p feas: {feas:.4e} | comp: {comp:.4e} | stat: {stat:.4e} | Slack: {np.max(np.abs(self.sol.Slack)):.4e} | Slack_AO: {np.max(np.abs(self.sol.Slack_OA)):.4e}')
             except BlockingIOError:
                 # Avoid crashing if stdout pipe is saturated (e.g., headless workers).
                 pass
 
-        return self.sol.x1, self.sol.x2, self.success
+        return self.sol.x1_sol, self.sol.x2_sol, self.success
 
 
     def MPC_guess_human_init(self):
@@ -674,7 +644,9 @@ class CollaborativeGame():
                 d = (self.d_max + self.d_min)/2
                 factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
                 for factor in factors[1:-1]:
-                    opti.subject_to( ca.sumsqr((1-factor)*x1[k+1, :] + factor*x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2 )
+                    opti.subject_to(
+                        ca.sumsqr((1-factor)*x1[k+1, :] + factor*x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2
+                    )
 
         opts = {"print_time": 0,
                 "ipopt": {"mu_strategy": "adaptive",
@@ -701,7 +673,7 @@ class CollaborativeGame():
 
         return
 
-    def Centralized_MPC_calc(self, time, x1_0, v1_0, x1_tgt, x2_0, v2_0, x2_tgt, alpha):
+    def Centralized_MPC_calc(self, x1_0, v1_0, x1_tgt, x2_0, v2_0, x2_tgt, alpha):
 
         self.centralized_mpc.opti.set_value(self.centralized_mpc.x1_0, x1_0)
         self.centralized_mpc.opti.set_value(self.centralized_mpc.v1_0, v1_0)
@@ -762,34 +734,12 @@ class CollaborativeGame():
             plt.pause(0.1)
             
         self.Centralized_MPC_sol = SimpleNamespace()
-        self.Centralized_MPC_sol.time = time
-        self.Centralized_MPC_sol.x1 = x1_sol
-        self.Centralized_MPC_sol.v1 = v1_sol
-        self.Centralized_MPC_sol.a1 = a1_sol
-        self.Centralized_MPC_sol.x2 = x2_sol
-        self.Centralized_MPC_sol.v2 = v2_sol
-        self.Centralized_MPC_sol.a2 = a2_sol
-        self.Centralized_MPC_sol.Slack = Slack_sol
-        self.Centralized_MPC_sol.alpha = alpha
-        self.Centralized_MPC_sol.beta = 0.0
+        self.Centralized_MPC_sol.x1_sol = x1_sol
+        self.Centralized_MPC_sol.v1_sol = v1_sol
+        self.Centralized_MPC_sol.a1_sol = a1_sol
+        self.Centralized_MPC_sol.x2_sol = x2_sol
+        self.Centralized_MPC_sol.v2_sol = v2_sol
+        self.Centralized_MPC_sol.a2_sol = a2_sol
+        self.Centralized_MPC_sol.Slack_sol = Slack_sol
 
         return x1_sol, v1_sol, a1_sol, x2_sol, v2_sol, a2_sol, Slack_sol
-    
-    def calc_init_guess_from_input(self, x1_0, v1_0, x2_0, v2_0, a1, a2):
-        x1_guess = np.zeros((self.N+1, self.n_dim))
-        v1_guess = np.zeros((self.N+1, self.n_dim))
-        x2_guess = np.zeros((self.N+1, self.n_dim))
-        v2_guess = np.zeros((self.N+1, self.n_dim))
-
-        x1_guess[0,:] = x1_0
-        v1_guess[0,:] = v1_0
-        x2_guess[0,:] = x2_0
-        v2_guess[0,:] = v2_0
-
-        for k in range(self.N):
-            v1_guess[k+1,:] = v1_guess[k,:] + self.dt*a1[min(k, a1.shape[0]-1),:]
-            x1_guess[k+1,:] = x1_guess[k,:] + self.dt*v1_guess[k,:] + 0.5*self.dt**2*a1[min(k, a1.shape[0]-1),:]
-            v2_guess[k+1,:] = v2_guess[k,:] + self.dt*a2[min(k, a2.shape[0]-1),:]
-            x2_guess[k+1,:] = x2_guess[k,:] + self.dt*v2_guess[k,:] + 0.5*self.dt**2*a2[min(k, a2.shape[0]-1),:]
-
-        return x1_guess, v1_guess, x2_guess, v2_guess
