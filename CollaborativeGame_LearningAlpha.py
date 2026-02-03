@@ -22,7 +22,7 @@ import sys
 
 
 
-Tf = 10.0
+Tf = 15.0
 alpha_vec = [ 0.5, 0.05]
 beta_vec = [0.5, 0.5]
 dalpha, dbeta = 0.1, 0.1
@@ -61,7 +61,7 @@ Scenarios: List[Scenario] =[
 
 # Scenario(name="Scenario_1", x1_init=np.array([[-4, 2.0]]), x2_init=np.array([[-4.0+6*np.cos(np.deg2rad(225)), 2.0+6*np.sin(np.deg2rad(225))]]), x1_des=np.array([[6.0, -2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=1),
 # Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=5),
-Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=50),
+Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=10),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
@@ -518,7 +518,7 @@ def run_single_mc(
                 for Obstcle in Scenario.obstacles:
                     dist_to_obs = np.linalg.norm(x1_state - Obstcle['Pos']) - Obstcle['diam']/2
                     Vel_near_Obs = Vel_near_Obs*min(1.0, dist_to_obs / (Obstcle['diam']/2))
-            a1_cmd += (min(pp_dist/(3*tau),Vel_near_Obs*GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+            a1_cmd += (min(max(0.0,pp_dist-0.2)/(3*tau),Vel_near_Obs*GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
             a1_cmd = LimitedCmd(a1_cmd, a1_acc_limit)
         else:
             a1_cmd = GameSol.sol.a1[i_acc, :]
@@ -571,7 +571,7 @@ def run_single_mc(
         confidence_hist = np.vstack((confidence_hist, np.array([GameSol.sol.confidence], dtype=float)))
         t_hist = np.vstack((t_hist, t))
 
-        if np.linalg.norm(x2_state - x1_state) > GameSol.d + 1.0:
+        if np.linalg.norm(x2_state - x1_state) > GameSol.d + 10*GameSol.delta_d:
             infeasible_run = True
             EndSimulation = True
             print('Terminating MC run due to excessive separation.')
@@ -635,7 +635,7 @@ def run_single_mc(
                 frame = capture_frame_agg(fig, canvas, w_target, h_target)
                 Frames.append(frame)
 
-        if EndSimulation or (t >= Tf) or (max(np.linalg.norm(x1_state - x1_des), np.linalg.norm(x2_state - x2_des)) < 0.5):
+        if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 1.0):
             EndSimulation = True
             if rt_plot:
                 for i in range(len(p12_line_pred)):
@@ -748,6 +748,8 @@ def run_scenario(Scenario: Scenario):
             else:
                 mc_start = 0
 
+            # mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, 2, SolverType, plot_context))
+            
             mc_indices = list(range(mc_start, Scenario.Nmc))
             if not mc_indices:
                 continue
