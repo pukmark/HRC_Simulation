@@ -756,7 +756,7 @@ def run_scenario(Scenario: Scenario):
             if not RT_Plot and len(mc_indices) == 1:
                 mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, mc_indices[0], SolverType, None))
                 continue
-            max_workers = max(1, min(len(mc_indices), (os.cpu_count()-12 or 1)))
+            max_workers = max(1, min(25, len(mc_indices), (os.cpu_count()-12 or 1)))
             # Use spawn so Julia is initialized fresh per worker (fork can cause ReadOnlyMemoryError)
             with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
                 futures = [
