@@ -412,7 +412,7 @@ def run_scenario(Scenario: Scenario):
             else:
                 mc_start = 0
 
-            run_single_mc(Scenario, alpha, beta, ialpha, 14, SolverType, plot_context)
+            # run_single_mc(Scenario, alpha, beta, ialpha, 14, SolverType, plot_context)
             
             mc_indices = list(range(mc_start, Scenario.Nmc))
             if not mc_indices:
