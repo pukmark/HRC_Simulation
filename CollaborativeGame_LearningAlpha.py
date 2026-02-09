@@ -24,12 +24,13 @@ from AuxilityFuncs import (
 
 os.system('clear')
 
-
 Tf = 15.0
-# alpha_vec = [0.1, 0.25, 0.5, 0.1, 0.25, 0.5, 0.1, 0.25, 0.5]
-# beta_vec  = [0.1, 0.1, 0.1, 0.25, 0.25, 0.25, 0.5, 0.5, 0.5]
-alpha_vec = [0.1, 0.1 , 0.1]
-beta_vec  = [0.1, 0.25, 0.5]
+alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
+beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
+
+# alpha_vec = [0.1]
+# beta_vec  = [0.1]
+
 dalpha, dbeta = 0.1, 0.1
 
 N = 10
@@ -256,20 +257,17 @@ def run_single_mc(
         
         
         # Apply acceleration commands and propagate states
-        # a1_cmd = LimitedCmd(a1_cmd, GameSol.a1_max)
-        a1_cmd = limited_cmd(a1_cmd, a1_acc_limit)
         a2_cmd = np.zeros((1,2))
         a2_cmd[0,0] = interp1d(GameSol.sol.time+np.linspace(0,(N-1)*GameSol.dt, N), GameSol.sol.a2[:,0], kind='previous', fill_value='extrapolate')(t)
         a2_cmd[0,1] = interp1d(GameSol.sol.time+np.linspace(0,(N-1)*GameSol.dt, N), GameSol.sol.a2[:,1], kind='previous', fill_value='extrapolate')(t)
-        # a2_cmd[0,1] = np.interp(t, GameSol.sol.time+np.linspace(0,(N-1)*GameSol.dt, N), GameSol.sol.a2[:,1])
-        # a2_cmd[0,0] = GameSol.sol.a2[i_acc,0]
-        # a2_cmd[0,1] = GameSol.sol.a2[i_acc,1]
-        # a2_cmd = LimitedCmd(np.array(a2_cmd), GameSol.a2_max)
+        a1_cmd = limited_cmd(a1_cmd, a1_acc_limit)
+        a2_cmd = limited_cmd(np.array(a2_cmd), GameSol.a2_max)
         x1_state = x1_state + dt_Sim * v1_state + 0.5 * dt_Sim**2 * a1_cmd
         v1_state = v1_state + dt_Sim * a1_cmd
         x2_state = x2_state + dt_Sim * v2_state + 0.5 * dt_Sim**2 * a2_cmd
         v2_state = v2_state + dt_Sim * a2_cmd
         t += dt_Sim
+        
         # Log data for analysis and plotting
         x1_hist = np.vstack((x1_hist, x1_state))
         v1_hist = np.vstack((v1_hist, v1_state))
@@ -403,35 +401,41 @@ def run_scenario(Scenario: Scenario):
     plot_context = {'Frames': []} if RT_Plot else None
     mc_run_stats = []
 
+    if len(Scenario.obstacles) > 0:
+        beta1_vec = beta_vec
+    else:
+        beta1_vec = [0.5]
     # for SolverType in ['DG', 'Centralized']:
-    for SolverType in ['DG']:
-        for ialpha, alpha in enumerate(alpha_vec):
-            beta = beta_vec[ialpha]
-            if Scenario.Nmc <= 0:
-                continue
-            if RT_Plot and Scenario.Nmc == 1:
-                mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, 0, SolverType, plot_context))
-                mc_start = 1
-            else:
-                mc_start = 0
+    i=0
+    for SolverType in ['DG', 'Centralized']:
+        for alpha in alpha_vec:
+            for beta in beta1_vec:
+                if Scenario.Nmc <= 0:
+                    continue
+                if RT_Plot and Scenario.Nmc == 1:
+                    mc_run_stats.append(run_single_mc(Scenario, alpha, beta, i, 0, SolverType, plot_context))
+                    mc_start = 1
+                else:
+                    mc_start = 0
 
-            # run_single_mc(Scenario, alpha, beta, ialpha, 30, SolverType, plot_context)
-            
-            mc_indices = list(range(mc_start, Scenario.Nmc))
-            if not mc_indices:
-                continue
-            if not RT_Plot and len(mc_indices) == 1:
-                mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, mc_indices[0], SolverType, None))
-                continue
-            max_workers = max(1, min(25, len(mc_indices), (os.cpu_count()-12 or 1)))
-            # Use spawn so Julia is initialized fresh per worker (fork can cause ReadOnlyMemoryError)
-            with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
-                futures = [
-                    executor.submit(run_single_mc, Scenario, alpha, beta, ialpha, mc_idx, SolverType, None)
-                    for mc_idx in mc_indices
-                ]
-                for fut in futures:
-                    mc_run_stats.append(fut.result())
+                # run_single_mc(Scenario, alpha, beta, i, 30, SolverType, plot_context)
+                
+                mc_indices = list(range(mc_start, Scenario.Nmc))
+                if not mc_indices:
+                    continue
+                if not RT_Plot and len(mc_indices) == 1:
+                    mc_run_stats.append(run_single_mc(Scenario, alpha, beta, i, mc_indices[0], SolverType, None))
+                    continue
+                max_workers = max(1, min(25, len(mc_indices), (os.cpu_count()-12 or 1)))
+                # Use spawn so Julia is initialized fresh per worker (fork can cause ReadOnlyMemoryError)
+                with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
+                    futures = [
+                        executor.submit(run_single_mc, Scenario, alpha, beta, i, mc_idx, SolverType, None)
+                        for mc_idx in mc_indices
+                    ]
+                    for fut in futures:
+                        mc_run_stats.append(fut.result())
+                i += 1
 
     if plot_context is not None:
         write_frames_to_mp4(plot_context, Scenario.name)

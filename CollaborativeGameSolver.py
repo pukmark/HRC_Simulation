@@ -702,6 +702,9 @@ class CollaborativeGame():
         return
 
     def Centralized_MPC_calc(self, time, x1_0, v1_0, x1_tgt, x2_0, v2_0, x2_tgt, alpha):
+        
+        err_dist = max(0.0, abs(np.linalg.norm(x1_0 - x2_0) - self.d) - self.delta_d)
+        self.confidence = np.clip(self.confidence + 0.05 - 0.05*err_dist/self.delta_d, 0.0, 1.0)
 
         self.centralized_mpc.opti.set_value(self.centralized_mpc.x1_0, x1_0)
         self.centralized_mpc.opti.set_value(self.centralized_mpc.v1_0, v1_0)
@@ -772,6 +775,7 @@ class CollaborativeGame():
         self.Centralized_MPC_sol.Slack = Slack_sol
         self.Centralized_MPC_sol.alpha = alpha
         self.Centralized_MPC_sol.beta = 0.0
+        self.Centralized_MPC_sol.confidence = self.confidence
 
         return x1_sol, v1_sol, a1_sol, x2_sol, v2_sol, a2_sol, Slack_sol
     

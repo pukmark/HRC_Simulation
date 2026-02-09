@@ -311,7 +311,7 @@ def main():
     parser.add_argument(
         "--csv",
         type=Path,
-        default=Path("Scenario_4_mc_stats.csv"),
+        default=Path("Scenario_2_mc_stats.csv"),
         help="Path to the mc_stats CSV produced by CollaborativeGame.",
     )
     parser.add_argument(
