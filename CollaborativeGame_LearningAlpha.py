@@ -91,6 +91,7 @@ def run_single_mc(
     np.random.seed(100 + n_mc)
     x1_init, x2_init, x1_des, theta_des = Scenario.x1_init, Scenario.x2_init, Scenario.x1_des, Scenario.theta_des
     Obstcles = Scenario.obstacles
+    log = True if RT_Plot and n_mc == 0 else False
 
     d_init = np.linalg.norm(x1_init-x2_init)
     x2_des = x1_des + d_init * np.array([np.cos(theta_des), np.sin(theta_des)])
@@ -145,22 +146,22 @@ def run_single_mc(
                 dalpha = (0.9-0.1)/Ntries - alpha
                 dbeta = (0.9-0.1)/Ntries - beta
                 for i_dalpha in range(0,Ntries+1):
-                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha+dalpha*i_dalpha, beta+dbeta*i_dalpha, z0=z0, log=True)
+                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha+dalpha*i_dalpha, beta+dbeta*i_dalpha, z0=z0, log=log)
                     if GameSol.success: break
                 else:
                     Generalz0 = GeneralGameSol.z0
                     Generalz0[:z0.shape[0]] = z0
-                    GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=True)
+                    GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=log)
                 if i_dalpha>0 and GameSol.success:
                     success = False
                     for i_dalpha_back in range(i_dalpha,-1,-1):
-                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha + dalpha*i_dalpha_back, beta + dbeta*i_dalpha_back, log=True)
+                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha + dalpha*i_dalpha_back, beta + dbeta*i_dalpha_back, log=log)
                         if GameSol.success: 
                             success = True
                     if success: 
                         GameSol.success = True
                     else:
-                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=True)
+                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
                 
             if not GameSol.success and SolverType == 'DG':
                 # x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
@@ -186,18 +187,18 @@ def run_single_mc(
                 dalpha = (0.9-0.1)/Ntries - alpha
                 dbeta = (0.9-0.1)/Ntries - beta
                 for i_dalpha in range(0,Ntries+1):
-                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha+dalpha*i_dalpha, beta+dbeta*i_dalpha, z0=z0, log=True)
+                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha+dalpha*i_dalpha, beta+dbeta*i_dalpha, z0=z0, log=log)
                     if GameSol.success: break
                 if i_dalpha>0 and GameSol.success:
                     success = False
                     for i_dalpha_back in range(i_dalpha,-1,-1):
-                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha + dalpha*i_dalpha_back, beta + dbeta*i_dalpha_back, log=True)
+                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha + dalpha*i_dalpha_back, beta + dbeta*i_dalpha_back, log=log)
                         if GameSol.success: 
                             success = True
                     if success: 
                         GameSol.success = True
                     else:
-                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=True)
+                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
                 
             if SolverType == 'Centralized':
                 GameSol.Centralized_MPC_calc(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha)
@@ -311,7 +312,7 @@ def run_single_mc(
                 dt_Sim,
             )
 
-        if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 1.0):
+        if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 2.0):
             EndSimulation = True
             if rt_plot:
                 finalize_plot_context(
@@ -411,7 +412,7 @@ def run_scenario(Scenario: Scenario):
             else:
                 mc_start = 0
 
-            # mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, 2, SolverType, plot_context))
+            run_single_mc(Scenario, alpha, beta, ialpha, 14, SolverType, plot_context)
             
             mc_indices = list(range(mc_start, Scenario.Nmc))
             if not mc_indices:
