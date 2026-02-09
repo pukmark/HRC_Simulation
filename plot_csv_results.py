@@ -175,23 +175,36 @@ def _plot_metric(ax, groups, mean_key: str, std_key: str, ylabel: str):
     ax.legend()
 
 
+def _distance_error_series(grp: np.ndarray):
+    names = set(grp.dtype.names or [])
+    if "d_init" in names:
+        d_nom = float(np.mean(grp["d_init"]))
+        return grp["distance_mean"] - d_nom, grp["distance_std"], d_nom
+    return grp["distance_mean"], grp["distance_std"], None
+
+
 def _plot_distance(ax, groups, has_range: bool):
     colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(groups)))
     for color, ((alpha, beta), grp) in zip(colors, groups):
         mc = grp["mc_run"]
         if has_range:
             ax.fill_between(mc, grp["distance_max"], color=color, alpha=0.15)
+        dist_mean, dist_std, d_nom = _distance_error_series(grp)
         ax.errorbar(
             mc,
-            grp["distance_mean"],
-            yerr=grp["distance_std"],
+            dist_mean,
+            yerr=dist_std,
             fmt="o-",
             capsize=3,
             label=_group_label(alpha, beta),
             color=color,
         )
     ax.set_xlabel("MC run")
-    ylabel = "Distance [m]" if not has_range else "Distance [m] (mean ± std, min/max band)"
+    if d_nom is None:
+        ylabel = "Distance [m]" if not has_range else "Distance [m] (mean ± std, min/max band)"
+    else:
+        ylabel = "Distance error [m] from d_init" if not has_range else "Distance error [m] (mean ± std, min/max band)"
+        ax.axhline(0.0, color="k", linestyle="--", linewidth=1.0, alpha=0.6)
     ax.set_ylabel(ylabel)
     ax.grid(True, linestyle="--", alpha=0.4)
     ax.legend()
@@ -206,21 +219,38 @@ def _plot_summary_stats(groups, csv_path: Path, output: Path | None = None, show
         stds = [float(np.std(grp[metric])) for _, grp in groups]
         return means, stds
 
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8))
+    names = set(groups[0][1].dtype.names or [])
+    has_confidence = {"confidence_mean", "confidence_std"}.issubset(names)
+
+    fig_rows = 3 if has_confidence else 2
+    fig, axes = plt.subplots(fig_rows, 2, figsize=(13, 10 if has_confidence else 8))
     fig.suptitle(f"Per-scenario mean/std from {csv_path.name}")
 
-    for ax, metric, ylabel in [
+    metric_axes = [
         (axes[0, 0], "distance_mean", "Distance [m]"),
         (axes[0, 1], "a1_acc_mean", "Human accel [m/s^2]"),
         (axes[1, 0], "a2_acc_mean", "Robot accel [m/s^2]"),
         (axes[1, 1], "scenario_time", "Scenario time [s]"),
-    ]:
+    ]
+    if has_confidence:
+        metric_axes.append((axes[2, 0], "confidence_mean", "Confidence"))
+
+    for ax, metric, ylabel in metric_axes:
         means, stds = stats(metric)
+        if metric == "distance_mean":
+            if "d_init" in names:
+                d_nom = [float(np.mean(grp["d_init"])) for _, grp in groups]
+                means = [m - d for m, d in zip(means, d_nom)]
+                ylabel = "Distance error [m] from d_init"
+                ax.axhline(0.0, color="k", linestyle="--", linewidth=1.0, alpha=0.6)
         ax.errorbar(x, means, yerr=stds, fmt="o", capsize=4)
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=45, ha="right")
         ax.set_ylabel(ylabel)
         ax.grid(True, linestyle="--", alpha=0.4)
+
+    if has_confidence:
+        axes[2, 1].axis("off")
 
     fig.tight_layout()
     fig.subplots_adjust(top=0.88)
@@ -293,14 +323,47 @@ def main():
     args = parser.parse_args()
 
     data_raw = _load_csv(args.csv)
-    for i in range(len(data_raw)):
-        data_raw[i][3] -= 7
     
     data, dropped = _filter_valid_rows(data_raw)
     if dropped:
         print(f"Ignoring {dropped} infeasible run(s) marked with -1 stats.")
     if data.size == 0:
         raise SystemExit("No valid rows remain after filtering infeasible runs.")
+
+    # Log scenario-level parameters if present in the CSV.
+    param_keys = [
+        "N",
+        "dt_Solver",
+        "dt_Sim",
+        "a1_acc_limit",
+        "Human_PreDefined_Traj",
+        "Human_RandomWalk_Traj",
+        "d_init",
+        "Tf",
+        "pp_theta",
+        "pp_factor",
+        "Nmc",
+        "theta_des",
+        "x1_init_x",
+        "x1_init_y",
+        "x2_init_x",
+        "x2_init_y",
+        "x1_des_x",
+        "x1_des_y",
+        "num_obstacles",
+    ]
+    names = set(data_raw.dtype.names or [])
+    present_params = [k for k in param_keys if k in names]
+    if present_params:
+        print("Scenario parameters from CSV:")
+        for key in present_params:
+            values = np.unique(data_raw[key])
+            if values.size == 1:
+                print(f"  {key}={values[0]}")
+            else:
+                joined = ", ".join(str(v) for v in values[:6])
+                suffix = "" if values.size <= 6 else ", ..."
+                print(f"  {key} has {values.size} values: {joined}{suffix}")
 
     fail_stats = _failure_stats_by_group(data_raw, data)
     print("Failed run percentage per group:")

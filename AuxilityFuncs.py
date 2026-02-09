@@ -390,6 +390,7 @@ def finalize_plot_context(
     scenario: Scenario,
     ialpha: int,
     alpha: float,
+    beta: float,
     hist_col: List[str],
     t_hist: np.ndarray,
     v1_hist: np.ndarray,
@@ -430,24 +431,24 @@ def finalize_plot_context(
     if fig is not None:
         fig.savefig(f"{scenario.name}_traj_final.png")
 
-    ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], "-", color=hist_col[ialpha], linewidth=2, label=f"alpha={alpha}")
-    ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], "--", color=hist_col[ialpha], linewidth=2)
+    ax_xy.plot(x1_hist[:, 0], x1_hist[:, 1], "--", color=hist_col[ialpha], linewidth=2, label=rf"$(\alpha, \beta)=({alpha}, {beta})$")
+    ax_xy.plot(x2_hist[:, 0], x2_hist[:, 1], "-", color=hist_col[ialpha], linewidth=2)
     ax_xy.legend(ncol=4, loc="upper center")
     ax_xy.set_title("Trajectories")
     if ialpha == 0:
-        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2, label="Human")
-        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2, label="Robot")
+        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2, label="Human")
+        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2, label="Robot")
     else:
-        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2)
-        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2)
+        ax_vel.plot(t_hist, np.linalg.norm(v1_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2)
+        ax_vel.plot(t_hist, np.linalg.norm(v2_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2)
 
     p1_vel.set_data([], [])
     p2_vel.set_data([], [])
     p1_vel_pred.set_data([], [])
     p2_vel_pred.set_data([], [])
     ax_vel.legend()
-    ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2)
-    ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2)
+    ax_acc.plot(t_hist[:-1], np.linalg.norm(a1_hist, axis=1), "--", color=hist_col[ialpha], linewidth=2)
+    ax_acc.plot(t_hist[:-1], np.linalg.norm(a2_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2)
     ax_dist.plot(t_hist, np.linalg.norm(x1_hist - x2_hist, axis=1), "-", color=hist_col[ialpha], linewidth=2)
     p1_pred.set_data([], [])
     p2_pred.set_data([], [])
