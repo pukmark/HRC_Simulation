@@ -18,7 +18,7 @@ import numpy as np
 
 
 def _load_csv(csv_path: Path) -> np.ndarray:
-    data = np.genfromtxt(csv_path, delimiter=",", names=True)
+    data = np.genfromtxt(csv_path, delimiter=",", names=True, dtype=None, encoding=None)
     if data.ndim == 0:
         data = data.reshape(1)  # keep shapes consistent when file has one row
     return data
@@ -311,7 +311,7 @@ def main():
     parser.add_argument(
         "--csv",
         type=Path,
-        default=Path("Scenario_2_mc_stats.csv"),
+        default=Path("Scenario_1_mc_stats.csv"),
         help="Path to the mc_stats CSV produced by CollaborativeGame.",
     )
     parser.add_argument(

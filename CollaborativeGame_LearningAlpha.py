@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import csv
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -24,16 +25,18 @@ from AuxilityFuncs import (
 
 os.system('clear')
 
-Tf = 15.0
-alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
-beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
+# SolverType_vec = ['DG', 'Centralized']
+# alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
+# beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
 
-# alpha_vec = [0.1]
-# beta_vec  = [0.1]
+SolverType_vec = ['DG']
+alpha_vec = [0.1]
+beta_vec  = [0.5]
 
 dalpha, dbeta = 0.1, 0.1
 
-N = 10
+Tf = 15.0
+N = 5
 dt_Solver = 0.1
 dt_Sim = 0.1
 a1_acc_limit = 10.0
@@ -54,9 +57,11 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
-Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
-Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=100),
-Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=100),
+# Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
+# Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=100),
+# Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=1),
+Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
+
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
@@ -145,26 +150,29 @@ def run_single_mc(
                 z0[GameSol.indx_ax2:GameSol.indx_ax2 + N - 1] = GameSol.sol.a2[1:, 0]
                 z0[GameSol.indx_ay2:GameSol.indx_ay2 + N - 1] = GameSol.sol.a2[1:, 1]
                 
-                Ntries = 3
-                dalpha = (0.9-0.1)/Ntries - alpha
-                dbeta = (0.9-0.1)/Ntries - beta
-                for i_dalpha in range(0,Ntries+1):
-                    GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha+dalpha*i_dalpha, beta+dbeta*i_dalpha, z0=z0, log=log)
-                    if GameSol.success: break
-                else:
-                    Generalz0 = GeneralGameSol.z0
-                    Generalz0[:z0.shape[0]] = z0
-                    GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=log)
-                if i_dalpha>0 and GameSol.success:
-                    success = False
-                    for i_dalpha_back in range(i_dalpha,-1,-1):
-                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha + dalpha*i_dalpha_back, beta + dbeta*i_dalpha_back, log=log)
-                        if GameSol.success: 
-                            success = True
-                    if success: 
-                        GameSol.success = True
+                GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, beta, z0=z0, log=log)
+                
+                if not GameSol.success:
+                    Ntries = 5
+                    dalpha = (0.9-0.1)/Ntries
+                    dbeta = (0.9-0.1)/Ntries
+                    for i_dalpha in range(0,Ntries+1):
+                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1+dalpha*i_dalpha, 0.1+dbeta*i_dalpha, z0=z0, log=log)
+                        if GameSol.success: break
                     else:
-                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
+                        Generalz0 = GeneralGameSol.z0
+                        Generalz0[:z0.shape[0]] = z0
+                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=log)
+                    if i_dalpha>0 and GameSol.success:
+                        success = False
+                        for i_dalpha_back in range(i_dalpha,-1,-1):
+                            GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1 + dalpha*i_dalpha_back, 0.1 + dbeta*i_dalpha_back, log=log)
+                            if GameSol.success: 
+                                success = True
+                        if success: 
+                            GameSol.success = True
+                        else:
+                            GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
                 
             if not GameSol.success and SolverType == 'DG':
                 # x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
@@ -358,43 +366,41 @@ def run_single_mc(
         time_std = np.std([scenario_time])
     confidence_mean = confidence_series.mean()
     confidence_std = confidence_series.std()
-    return np.array(
-        [
-            alpha,
-            beta,
-            n_mc + 1,
-            dist_mean,
-            dist_std,
-            a1_mean,
-            a1_std,
-            a2_mean,
-            a2_std,
-            scenario_time,
-            time_std,
-            confidence_mean,
-            confidence_std,
-            N,
-            dt_Solver,
-            dt_Sim,
-            a1_acc_limit,
-            1.0 if Human_PreDefined_Traj else 0.0,
-            1.0 if Human_RandomWalk_Traj else 0.0,
-            d_init,
-            Tf,
-            pp_theta,
-            pp_factor,
-            float(Scenario.Nmc),
-            float(theta_des),
-            float(x1_init[0, 0]),
-            float(x1_init[0, 1]),
-            float(x2_init[0, 0]),
-            float(x2_init[0, 1]),
-            float(x1_des[0, 0]),
-            float(x1_des[0, 1]),
-            float(len(Obstcles)),
-        ],
-        dtype=float,
-    )
+    return [
+        alpha,
+        beta,
+        SolverType,
+        n_mc + 1,
+        dist_mean,
+        dist_std,
+        a1_mean,
+        a1_std,
+        a2_mean,
+        a2_std,
+        scenario_time,
+        time_std,
+        confidence_mean,
+        confidence_std,
+        N,
+        dt_Solver,
+        dt_Sim,
+        a1_acc_limit,
+        1.0 if Human_PreDefined_Traj else 0.0,
+        1.0 if Human_RandomWalk_Traj else 0.0,
+        d_init,
+        Tf,
+        pp_theta,
+        pp_factor,
+        float(Scenario.Nmc),
+        float(theta_des),
+        float(x1_init[0, 0]),
+        float(x1_init[0, 1]),
+        float(x2_init[0, 0]),
+        float(x2_init[0, 1]),
+        float(x1_des[0, 0]),
+        float(x1_des[0, 1]),
+        float(len(Obstcles)),
+    ]
 
 
 def run_scenario(Scenario: Scenario):
@@ -405,9 +411,10 @@ def run_scenario(Scenario: Scenario):
         beta1_vec = beta_vec
     else:
         beta1_vec = [0.5]
-    # for SolverType in ['DG', 'Centralized']:
     i=0
-    for SolverType in ['DG', 'Centralized']:
+    for SolverType in SolverType_vec:
+        if SolverType == 'Centralized':
+            beta1_vec = [0.5]
         for alpha in alpha_vec:
             for beta in beta1_vec:
                 if Scenario.Nmc <= 0:
@@ -441,49 +448,46 @@ def run_scenario(Scenario: Scenario):
         write_frames_to_mp4(plot_context, Scenario.name)
 
     if mc_run_stats and Scenario.Nmc > 1:
-        header = ",".join(
-            [
-                "alpha",
-                "beta",
-                "mc_run",
-                "distance_mean",
-                "distance_std",
-                "a1_acc_mean",
-                "a1_acc_std",
-                "a2_acc_mean",
-                "a2_acc_std",
-                "scenario_time",
-                "scenario_time_std",
-                "confidence_mean",
-                "confidence_std",
-                "N",
-                "dt_Solver",
-                "dt_Sim",
-                "a1_acc_limit",
-                "Human_PreDefined_Traj",
-                "Human_RandomWalk_Traj",
-                "d_init",
-                "Tf",
-                "pp_theta",
-                "pp_factor",
-                "Nmc",
-                "theta_des",
-                "x1_init_x",
-                "x1_init_y",
-                "x2_init_x",
-                "x2_init_y",
-                "x1_des_x",
-                "x1_des_y",
-                "num_obstacles",
-            ]
-        )
-        np.savetxt(
-            f"{Scenario.name}_mc_stats.csv",
-            np.vstack(mc_run_stats),
-            delimiter=",",
-            header=header,
-            comments="",
-        )
+        header = [
+            "alpha",
+            "beta",
+            "solver_type",
+            "mc_run",
+            "distance_mean",
+            "distance_std",
+            "a1_acc_mean",
+            "a1_acc_std",
+            "a2_acc_mean",
+            "a2_acc_std",
+            "scenario_time",
+            "scenario_time_std",
+            "confidence_mean",
+            "confidence_std",
+            "N",
+            "dt_Solver",
+            "dt_Sim",
+            "a1_acc_limit",
+            "Human_PreDefined_Traj",
+            "Human_RandomWalk_Traj",
+            "d_init",
+            "Tf",
+            "pp_theta",
+            "pp_factor",
+            "Nmc",
+            "theta_des",
+            "x1_init_x",
+            "x1_init_y",
+            "x2_init_x",
+            "x2_init_y",
+            "x1_des_x",
+            "x1_des_y",
+            "num_obstacles",
+        ]
+        csv_path = f"{Scenario.name}_mc_stats.csv"
+        with open(csv_path, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(header)
+            writer.writerows(mc_run_stats)
 
 
 def main():

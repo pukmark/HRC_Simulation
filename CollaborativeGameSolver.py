@@ -348,10 +348,10 @@ class CollaborativeGame():
                                                output="{output}",
                                                convergence_tolerance=tol,
                                                nms="{nms}",
-                                               crash_nbchange_limit=3,
-                                               major_iteration_limit=10000,
-                                               minor_iteration_limit=10000,
-                                               cumulative_iteration_limit=50000,
+                                               crash_nbchange_limit=5,
+                                               major_iteration_limit=100000,
+                                               minor_iteration_limit=100000,
+                                               cumulative_iteration_limit=500000,
                                                restart_limit=100)
         success = status == PATHSolver.MCP_Solved
 
