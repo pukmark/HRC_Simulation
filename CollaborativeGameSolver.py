@@ -59,7 +59,7 @@ class CollaborativeGame():
         a_confidence_factor = 1.0 + np.linspace(2, 0.0, N)*(1.0 - Confidence)**2.0  # from Confidence to 2-Confidence
 
         J1 = 0.5*(ca.sumsqr(x1[:,0]-x1_f[0]) + ca.sumsqr(x1[:,1]-x1_f[1])) + 0.1*ca.sumsqr(a_confidence_factor*a1)
-        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1])) + 0.1*ca.sumsqr(a2) + 1e3*ca.sumsqr(SlackL)
+        J2 = 0.5*(ca.sumsqr(x2[:,0]-x2_f[0]) + ca.sumsqr(x2[:,1]-x2_f[1])) + 0.1*ca.sumsqr(a2) + 1e4*ca.sumsqr(SlackL)
         
         # Obstacle avoidance term
         w_obs = 0.0      # tune this (1–50 typical)
@@ -212,7 +212,7 @@ class CollaborativeGame():
 
         self.confidence = 1.0
 
-        self.p_tol = 1e-4
+        self.p_tol = 1e-3
         
         self.nms = 1
 
@@ -642,9 +642,9 @@ class CollaborativeGame():
         a1, a2 = a[0:self.N, :], a[self.N:, :]
 
         # Objective: terminal accuracy + smooth controls + small velocity penalty + Slack penalty
-        opti.minimize((1-alpha)*0.001*ca.sumsqr(a1) + (1-alpha)*ca.sumsqr(x1[self.N, :] - x1_tgt) + 
-                      alpha*0.001*ca.sumsqr(a2) + alpha*ca.sumsqr(x2[self.N, :] - x2_tgt) +
-                      1e6*ca.sumsqr(Slack) )
+        opti.minimize((1-alpha)*0.1*ca.sumsqr(a1) + (1-alpha)*ca.sumsqr(x1[self.N, :] - x1_tgt) + 
+                      alpha*0.1*ca.sumsqr(a2) + alpha*ca.sumsqr(x2[self.N, :] - x2_tgt) +
+                      1e4*ca.sumsqr(Slack) )
 
         # Initial conditions
         opti.subject_to(x1[0, :] == x1_0)
@@ -665,14 +665,14 @@ class CollaborativeGame():
             opti.subject_to(self.v2_max**2 >= ca.sumsqr(v2[k+1, :]))
             opti.subject_to(self.a2_max**2 >= ca.sumsqr(a2[k, :]))
             # Distance constraints between agents
-            opti.subject_to(self.d_max**2 + Slack[k] >= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
-            opti.subject_to(self.d_min**2 - Slack[k] <= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
+            opti.subject_to(self.d_max**2 + Slack[k]**2 >= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
+            opti.subject_to(self.d_min**2 - Slack[k]**2 <= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
             # Obstacle avoidance for each agent and along the connecting segment
             for iObs, Obstcle in enumerate(self.Obstcles):
                 opti.subject_to(ca.sumsqr(x1[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
                 opti.subject_to(ca.sumsqr(x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
                 d = (self.d_max + self.d_min)/2
-                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
+                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/5)))
                 for factor in factors[1:-1]:
                     opti.subject_to( ca.sumsqr((1-factor)*x1[k+1, :] + factor*x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2 )
 

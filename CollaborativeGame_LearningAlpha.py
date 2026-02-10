@@ -25,18 +25,18 @@ from AuxilityFuncs import (
 
 os.system('clear')
 
-# SolverType_vec = ['DG', 'Centralized']
+SolverType_vec = ['DG', 'Centralized']
 # alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
 # beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
 
-SolverType_vec = ['DG']
-alpha_vec = [0.1]
-beta_vec  = [0.5]
+# SolverType_vec = ['DG']
+alpha_vec = [0.1, 0.5]
+beta_vec  = [0.1]
 
 dalpha, dbeta = 0.1, 0.1
 
 Tf = 15.0
-N = 5
+N = 10
 dt_Solver = 0.1
 dt_Sim = 0.1
 a1_acc_limit = 10.0
@@ -59,8 +59,8 @@ Scenarios: List[Scenario] =[
 
 # Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
 # Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=100),
-# Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=1),
-Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
+Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=1),
+# Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
 
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
@@ -90,6 +90,28 @@ def run_single_mc(
     SolverType: str,
     plot_context: Dict | None = None,
 ):
+    def _max_payload_penetration(x1: np.ndarray, x2: np.ndarray, obstacles) -> float:
+        if not obstacles:
+            return 0.0
+        p1 = x1.reshape(2)
+        p2 = x2.reshape(2)
+        seg = p2 - p1
+        seg_len2 = float(np.dot(seg, seg))
+        max_pen = 0.0
+        for obst in obstacles:
+            center = obst["Pos"].reshape(2)
+            radius = float(obst["diam"]) / 2.0
+            if seg_len2 < 1e-12:
+                dist = float(np.linalg.norm(center - p1))
+            else:
+                t = float(np.dot(center - p1, seg) / seg_len2)
+                t = min(1.0, max(0.0, t))
+                closest = p1 + t * seg
+                dist = float(np.linalg.norm(center - closest))
+            penetration = radius - dist
+            if penetration > max_pen:
+                max_pen = penetration
+        return max(0.0, max_pen)
     # Some environments mark stdout as non-blocking in subprocesses; force blocking to avoid spurious errors.
     try:
         os.set_blocking(sys.stdout.fileno(), True)
@@ -129,6 +151,7 @@ def run_single_mc(
     v1_state, v2_state = np.zeros((1, 2)), np.zeros((1, 2))
     EndSimulation = False
     infeasible_run = False
+    max_payload_penetration = 0.0
     i_acc = 0
     GameSol.success = False
     GameSol.sol.time = -1.0
@@ -275,7 +298,14 @@ def run_single_mc(
         x2_state = x2_state + dt_Sim * v2_state + 0.5 * dt_Sim**2 * a2_cmd
         v2_state = v2_state + dt_Sim * a2_cmd
         t += dt_Sim
-        
+
+        if Scenario.obstacles:
+            step_penetration = _max_payload_penetration(x1_state, x2_state, Scenario.obstacles)
+            if step_penetration > max_payload_penetration:
+                max_payload_penetration = step_penetration
+                if log:
+                    print(f"New max payload penetration: {max_payload_penetration:.3f} at time {t:.2f}s")
+
         # Log data for analysis and plotting
         x1_hist = np.vstack((x1_hist, x1_state))
         v1_hist = np.vstack((v1_hist, v1_state))
@@ -288,7 +318,7 @@ def run_single_mc(
         confidence_hist = np.vstack((confidence_hist, np.array([GameSol.sol.confidence], dtype=float)))
         t_hist = np.vstack((t_hist, t))
 
-        if np.linalg.norm(x2_state - x1_state) > GameSol.d + 10*GameSol.delta_d:
+        if np.linalg.norm(x2_state - x1_state) > GameSol.d + 5*GameSol.delta_d or max_payload_penetration > 0.1:
             infeasible_run = True
             EndSimulation = True
             print('Terminating MC run due to excessive separation.')
@@ -318,6 +348,7 @@ def run_single_mc(
                 x2_des,
                 dt_Solver,
                 dt_Sim,
+                max_payload_penetration,
             )
 
         if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 2.0):
@@ -399,6 +430,7 @@ def run_single_mc(
         float(x2_init[0, 1]),
         float(x1_des[0, 0]),
         float(x1_des[0, 1]),
+        max_payload_penetration,
         float(len(Obstcles)),
     ]
 
@@ -481,6 +513,7 @@ def run_scenario(Scenario: Scenario):
             "x2_init_y",
             "x1_des_x",
             "x1_des_y",
+            "max_payload_penetration",
             "num_obstacles",
         ]
         csv_path = f"{Scenario.name}_mc_stats.csv"

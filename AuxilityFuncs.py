@@ -271,6 +271,7 @@ def update_plot_context(
     x2_des: np.ndarray,
     dt_solver: float,
     dt_sim: float,
+    max_payload_penetration: float,
 ) -> None:
     fig = plot_context["fig"]
     canvas = plot_context["canvas"]
@@ -334,9 +335,12 @@ def update_plot_context(
     tgt1_plot.set_data([x1_des[0, 0]], [x1_des[0, 1]])
     tgt2_plot.set_data([x2_des[0, 0]], [x2_des[0, 1]])
     ax_xy.set_title(
-        f"Time: {t:3.3}[Sec], Alpha is {game_sol.sol.alpha}, "
-        f"Beta is {game_sol.sol.beta}, Confidence is {game_sol.sol.confidence}"
-    )
+    rf"Time: {t:3.3f} [s], "
+    rf"$\alpha$ = {game_sol.sol.alpha:.3f}, "
+    rf"$\beta$ = {game_sol.sol.beta:.3f}, "
+    rf"Confidence = {game_sol.sol.confidence:.3f}, "
+    rf"Penetration = {max_payload_penetration:.3f}"
+)
     ax_xy.legend(ncol=4, loc="upper center")
 
     t_pred = np.linspace(game_sol.sol.time - dt_solver, t - dt_solver + game_sol.N * dt_solver, game_sol.N + 1)

@@ -4,7 +4,7 @@ Quick utility to visualize Monte-Carlo statistics saved by CollaborativeGame.
 
 By default it reads `Scenario_1_mc_stats.csv` and produces a PNG with
 error-bar plots for distance (with optional min/max bands), acceleration,
-and scenario duration grouped by the `alpha` column (and `beta` when present).
+and scenario duration grouped by `(solver_type, alpha, beta)` when present.
 """
 from __future__ import annotations
 
@@ -24,22 +24,30 @@ def _load_csv(csv_path: Path) -> np.ndarray:
     return data
 
 
-def _iter_groups(data: np.ndarray) -> Iterable[Tuple[Tuple[float, float | None], np.ndarray]]:
+def _iter_groups(
+    data: np.ndarray,
+) -> Iterable[Tuple[Tuple[str | None, float, float | None], np.ndarray]]:
     names = set(data.dtype.names or [])
     has_beta = "beta" in names
-    if has_beta:
-        alphas = np.unique(data["alpha"])
-        betas = np.unique(data["beta"])
-        for alpha in alphas:
-            for beta in betas:
-                mask = (data["alpha"] == alpha) & (data["beta"] == beta)
+    has_solver = "solver_type" in names
+
+    solver_values = np.unique(data["solver_type"]) if has_solver else [None]
+    alpha_values = np.unique(data["alpha"])
+    beta_values = np.unique(data["beta"]) if has_beta else [None]
+
+    for solver in solver_values:
+        for alpha in alpha_values:
+            for beta in beta_values:
+                mask = data["alpha"] == alpha
+                if has_beta and beta is not None:
+                    mask &= data["beta"] == beta
+                if has_solver and solver is not None:
+                    mask &= data["solver_type"] == solver
                 if not np.any(mask):
                     continue
-                yield (float(alpha), float(beta)), np.sort(data[mask], order="mc_run")
-    else:
-        for alpha in np.unique(data["alpha"]):
-            mask = data["alpha"] == alpha
-            yield (float(alpha), None), np.sort(data[mask], order="mc_run")
+                solver_label = None if solver is None else str(solver)
+                beta_label = None if beta is None else float(beta)
+                yield (solver_label, float(alpha), beta_label), np.sort(data[mask], order="mc_run")
 
 
 def _has_distance_range(data: np.ndarray) -> bool:
@@ -73,26 +81,33 @@ def _filter_valid_rows(data: np.ndarray) -> Tuple[np.ndarray, int]:
 
 def _failure_stats_by_group(raw: np.ndarray, filtered: np.ndarray):
     """
-    Compute failure counts/percentages per (alpha, beta) group using raw vs. filtered data.
+    Compute failure counts/percentages per (solver_type, alpha, beta) group using raw vs. filtered data.
     """
     stats = []
-    for (alpha, beta), _ in _iter_groups(raw):
-        if beta is None:
-            raw_mask = raw["alpha"] == alpha
-            filt_mask = filtered["alpha"] == alpha if filtered.size else np.zeros(0, dtype=bool)
+    has_solver = "solver_type" in set(raw.dtype.names or [])
+    has_beta = "beta" in set(raw.dtype.names or [])
+    for (solver_type, alpha, beta), _ in _iter_groups(raw):
+        raw_mask = raw["alpha"] == alpha
+        if has_beta and beta is not None:
+            raw_mask &= raw["beta"] == beta
+        if has_solver and solver_type is not None:
+            raw_mask &= raw["solver_type"] == solver_type
+
+        if filtered.size:
+            filt_mask = filtered["alpha"] == alpha
+            if has_beta and beta is not None:
+                filt_mask &= filtered["beta"] == beta
+            if has_solver and solver_type is not None:
+                filt_mask &= filtered["solver_type"] == solver_type
         else:
-            raw_mask = (raw["alpha"] == alpha) & (raw["beta"] == beta)
-            filt_mask = (
-                (filtered["alpha"] == alpha) & (filtered["beta"] == beta)
-                if filtered.size
-                else np.zeros(0, dtype=bool)
-            )
+            filt_mask = np.zeros(0, dtype=bool)
         total = int(raw_mask.sum())
         valid = int(filt_mask.sum()) if filtered.size else 0
         failed = total - valid
         pct_failed = 0.0 if total == 0 else 100.0 * failed / total
         stats.append(
             {
+                "solver_type": solver_type,
                 "alpha": float(alpha),
                 "beta": float(beta) if beta is not None else None,
                 "total": total,
@@ -105,15 +120,16 @@ def _failure_stats_by_group(raw: np.ndarray, filtered: np.ndarray):
 
 def summarize_by_group(data: np.ndarray):
     """
-    Compute simple means across MC runs for each (alpha, beta) group.
+    Compute simple means across MC runs for each (solver_type, alpha, beta) group.
     """
     summaries = []
     names = set(data.dtype.names or [])
     has_range = _has_distance_range(data)
     has_confidence = {"confidence_mean", "confidence_std"}.issubset(names)
-    for (alpha, beta), grp in _iter_groups(data):
+    for (solver_type, alpha, beta), grp in _iter_groups(data):
         summaries.append(
             {
+                "solver_type": solver_type,
                 "alpha": alpha,
                 "beta": beta,
                 "n": len(grp),
@@ -140,9 +156,10 @@ def mean_max_distance_by_group(data: np.ndarray):
     if not _has_distance_range(data):
         return []
     results = []
-    for (alpha, beta), grp in _iter_groups(data):
+    for (solver_type, alpha, beta), grp in _iter_groups(data):
         results.append(
             {
+                "solver_type": solver_type,
                 "alpha": float(alpha),
                 "beta": float(beta) if beta is not None else None,
                 "dist_max_mean": float(np.mean(grp["distance_max"])),
@@ -151,7 +168,11 @@ def mean_max_distance_by_group(data: np.ndarray):
     return results
 
 
-def _group_label(alpha: float, beta: float | None) -> str:
+def _group_label(solver_type: str | None, alpha: float, beta: float | None) -> str:
+    if solver_type:
+        if beta is None:
+            return f"{solver_type} | alpha={alpha:.2f}"
+        return f"{solver_type} | alpha={alpha:.2f}, beta={beta:.2f}"
     if beta is None:
         return f"alpha={alpha:.2f}"
     return f"alpha={alpha:.2f}, beta={beta:.2f}"
@@ -159,14 +180,14 @@ def _group_label(alpha: float, beta: float | None) -> str:
 
 def _plot_metric(ax, groups, mean_key: str, std_key: str, ylabel: str):
     colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(groups)))
-    for color, ((alpha, beta), grp) in zip(colors, groups):
+    for color, ((solver_type, alpha, beta), grp) in zip(colors, groups):
         ax.errorbar(
             grp["mc_run"],
             grp[mean_key],
             yerr=grp[std_key],
             fmt="o-",
             capsize=3,
-            label=_group_label(alpha, beta),
+            label=_group_label(solver_type, alpha, beta),
             color=color,
         )
     ax.set_xlabel("MC run")
@@ -185,7 +206,7 @@ def _distance_error_series(grp: np.ndarray):
 
 def _plot_distance(ax, groups, has_range: bool):
     colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(groups)))
-    for color, ((alpha, beta), grp) in zip(colors, groups):
+    for color, ((solver_type, alpha, beta), grp) in zip(colors, groups):
         mc = grp["mc_run"]
         if has_range:
             ax.fill_between(mc, grp["distance_max"], color=color, alpha=0.15)
@@ -196,7 +217,7 @@ def _plot_distance(ax, groups, has_range: bool):
             yerr=dist_std,
             fmt="o-",
             capsize=3,
-            label=_group_label(alpha, beta),
+            label=_group_label(solver_type, alpha, beta),
             color=color,
         )
     ax.set_xlabel("MC run")
@@ -211,7 +232,7 @@ def _plot_distance(ax, groups, has_range: bool):
 
 
 def _plot_summary_stats(groups, csv_path: Path, output: Path | None = None, show: bool = False) -> Path:
-    labels = [_group_label(alpha, beta) for (alpha, beta), _ in groups]
+    labels = [_group_label(solver_type, alpha, beta) for (solver_type, alpha, beta), _ in groups]
     x = np.arange(len(groups))
 
     def stats(metric: str):
@@ -278,14 +299,14 @@ def plot_results(data: np.ndarray, csv_path: Path, output: Path | None = None, s
     # Overlay robot accel on a second y-axis for clarity.
     ax2 = axes[1].twinx()
     colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(groups)))
-    for color, ((alpha, beta), grp) in zip(colors, groups):
+    for color, ((solver_type, alpha, beta), grp) in zip(colors, groups):
         ax2.errorbar(
             grp["mc_run"],
             grp["a2_acc_mean"],
             yerr=grp["a2_acc_std"],
             fmt="s--",
             capsize=3,
-            label=f"robot {_group_label(alpha, beta)}",
+            label=f"robot {_group_label(solver_type, alpha, beta)}",
             color=color,
         )
     ax2.set_ylabel("Robot accel [m/s^2]")
@@ -368,7 +389,7 @@ def main():
     fail_stats = _failure_stats_by_group(data_raw, data)
     print("Failed run percentage per group:")
     for fs in fail_stats:
-        label = _group_label(fs["alpha"], fs["beta"])
+        label = _group_label(fs["solver_type"], fs["alpha"], fs["beta"])
         print(f"  {label}: failed {fs['failed']}/{fs['total']} ({fs['pct_failed']:.1f}%)")
 
     has_range = _has_distance_range(data)
@@ -379,12 +400,12 @@ def main():
     if dist_max_stats:
         print("Mean max distance per group:")
         for item in dist_max_stats:
-            label = _group_label(item["alpha"], item["beta"])
+            label = _group_label(item["solver_type"], item["alpha"], item["beta"])
             print(f"  {label}: dist_max_mean={item['dist_max_mean']:.3f}")
 
     print("MC means per group:")
     for summary in summarize_by_group(data):
-        label = _group_label(summary["alpha"], summary["beta"])
+        label = _group_label(summary["solver_type"], summary["alpha"], summary["beta"])
         parts = [
             f"{label} (n={summary['n']}):",
             f"dist_mean={summary['distance_mean']:.3f}",
