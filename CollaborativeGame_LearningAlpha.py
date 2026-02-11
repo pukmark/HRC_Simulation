@@ -57,7 +57,7 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6', 'x1_init': np.array([[5, 0]]), 'x2_init':np.array([[2, 0]]), 'x1_des': np.array([[6, 0]]), 'theta_des':np.deg2rad(0), 'Obs': []})
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
-Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
+# Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
 Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=100),
 Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=100),
 # Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
@@ -90,6 +90,13 @@ def run_single_mc(
     SolverType: str,
     plot_context: Dict | None = None,
 ):
+    def _safe_print(*args, **kwargs):
+        try:
+            print(*args, **kwargs)
+        except (BlockingIOError, BrokenPipeError, OSError, ValueError):
+            # Logging should never terminate a Monte Carlo worker.
+            pass
+
     def _max_payload_penetration(x1: np.ndarray, x2: np.ndarray, obstacles) -> float:
         if not obstacles:
             return 0.0
@@ -135,11 +142,7 @@ def run_single_mc(
             init_plot_context(Scenario, GameSol, x1_init, x2_init, x1_des, x2_des, Tf)
         )
 
-    try:
-        print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}", flush=True)
-    except (BlockingIOError, BrokenPipeError):
-        # Skip logging if stdout is still non-blocking for any reason.
-        pass
+    _safe_print(f"Scenario: {Scenario.name}, Alpha: {alpha}, MC: {n_mc+1}/{Scenario.Nmc}", flush=True)
     t = 0.0
     t_hist = np.array([[t]])
     x1_hist, v1_hist, a1_hist = x1_init, np.zeros((1, 2)), np.zeros((0, 2))
@@ -304,7 +307,7 @@ def run_single_mc(
             if step_penetration > max_payload_penetration:
                 max_payload_penetration = step_penetration
                 if log:
-                    print(f"New max payload penetration: {max_payload_penetration:.3f} at time {t:.2f}s")
+                    _safe_print(f"New max payload penetration: {max_payload_penetration:.3f} at time {t:.2f}s")
 
         # Log data for analysis and plotting
         x1_hist = np.vstack((x1_hist, x1_state))
@@ -321,7 +324,7 @@ def run_single_mc(
         if np.linalg.norm(x2_state - x1_state) > GameSol.d + 5*GameSol.delta_d or max_payload_penetration > 0.1:
             infeasible_run = True
             EndSimulation = True
-            print('Terminating MC run due to excessive separation.')
+            _safe_print('Terminating MC run due to excessive separation.')
 
         if rt_plot:
             update_plot_context(
