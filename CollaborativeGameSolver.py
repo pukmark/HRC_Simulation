@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
 
+import os
 import numpy as np
 import casadi as ca
 from types import SimpleNamespace
 import matplotlib.pyplot as plt
 
-from julia.api import Julia
-jl = Julia(compiled_modules=False)
-from julia import Main
-jl.using("PyCall")
-jl.using("PATHSolver")
+_JL = None
+_JULIA_MAIN = None
+
+
+def _get_julia():
+    global _JL, _JULIA_MAIN
+    if _JL is None:
+        os.environ.setdefault("JULIA_NUM_THREADS", "1")
+        from julia.api import Julia
+        _JL = Julia(compiled_modules=False)
+        from julia import Main
+        _JL.using("PyCall")
+        _JL.using("PATHSolver")
+        _JULIA_MAIN = Main
+    return _JL, _JULIA_MAIN
 
 """
 To use this solver, install the prerequisites using the following steps
@@ -28,6 +39,7 @@ To use this solver, install the prerequisites using the following steps
 
 class CollaborativeGame():
     def __init__(self, N: int = 10, dt: float = 0.1, d: float = 4.0, delta_d: float = 0.05, Obstcles: list = None, verbose: int = 0):
+        self.jl, self.Main = _get_julia()
         self.N = N
         self.dt = dt
         self.verbose = verbose
@@ -270,18 +282,18 @@ class CollaborativeGame():
         if z0 is not None:
             self.z0 = z0
         
-        Main.z0 = self.z0
+        self.Main.z0 = self.z0
 
-        Main.ub = np.inf*np.ones(self.n_u_inf)
-        Main.lb = np.concatenate((-np.inf*np.ones(self.n_l_inf), np.zeros(self.n_u_inf-self.n_l_inf)))
+        self.Main.ub = np.inf*np.ones(self.n_u_inf)
+        self.Main.lb = np.concatenate((-np.inf*np.ones(self.n_l_inf), np.zeros(self.n_u_inf-self.n_l_inf)))
 
         # Main.nnz = self.J.sparsity_out(0).nnz()
-        Main.nnz = self.fun_J.numel_out(0)
+        self.Main.nnz = self.fun_J.numel_out(0)
 
-        Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
-        Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence))
+        self.Main.F_py = lambda z: np.array(self.fun_F(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence)).squeeze()
+        self.Main.J_py = lambda z: np.array(self.fun_J(z, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, self.confidence))
 
-        Main.tol = self.p_tol
+        self.Main.tol = self.p_tol
 
         F_def = """
         function F(n::Cint, x::Vector{Cdouble}, f::Vector{Cdouble})
@@ -291,7 +303,7 @@ class CollaborativeGame():
         end
         return(F)
         """
-        Main.F = jl.eval(F_def)
+        self.Main.F = self.jl.eval(F_def)
 
         J_def = """
         function J(
@@ -325,7 +337,7 @@ class CollaborativeGame():
         end
         return(J)
         """
-        Main.J = jl.eval(J_def)
+        self.Main.J = self.jl.eval(J_def)
         
         if self.verbose:
             output = 'yes'
@@ -357,7 +369,7 @@ class CollaborativeGame():
 
         return z, success, info.residual, status
         """
-        z, self.success, res, status = jl.eval(solve)
+        z, self.success, res, status = self.jl.eval(solve)
         
         self.status_msg = status.__name__
         if self.success:
