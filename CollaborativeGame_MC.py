@@ -550,7 +550,7 @@ def main():
     if len(Scenarios) == 1:
         run_scenario(Scenarios[0])
         return
-    workers = min(len(Scenarios), os.cpu_count()-8 or 1)
+    workers = min(len(Scenarios), os.cpu_count()-8 or 4)
     with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn")) as executor:
         executor.map(run_scenario, Scenarios)
 

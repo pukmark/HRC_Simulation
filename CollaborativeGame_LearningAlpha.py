@@ -25,23 +25,23 @@ from AuxilityFuncs import (
 
 os.system('clear')
 
-SolverType_vec = ['DG', 'Centralized']
-alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
-beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
+# SolverType_vec = ['DG', 'Centralized']
+# alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
+# beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
 
-SolverType_vec = ['DG']
-alpha_vec = [0.05]
+SolverType_vec = ['DG','Centralized']
+alpha_vec = [0.05, 0.1, 0.3, 0.5]
 beta_vec  = [0.05]
 
 dalpha, dbeta = 0.1, 0.1
 
-Tf = 15.0
+Tf = 20.0
 N = 10
 dt_Solver = 0.1
 dt_Sim = 0.1
-a1_acc_limit = 10.0
-Human_PreDefined_Traj = False
-Human_RandomWalk_Traj = True
+a1_acc_limit = 5.0
+Human_PreDefined_Traj = True
+Human_RandomWalk_Traj = False
 
 # Define the initial conditions
 Scenarios: List[Scenario] =[
@@ -58,11 +58,13 @@ Scenarios: List[Scenario] =[
 # Scenarios.append({'Name': 'Scenario_6_Switch_WithObs', 'x1_init': np.array([[0, 0]]), 'x2_init':np.array([[3, 0]]), 'x1_des': np.array([[7, 4]]), 'theta_des':np.deg2rad(240), 'Obs': [{'Pos': np.array([[4.5,2]]), "diam": 0.5}]})
 
 # Scenario(name="Scenario_1", x1_init=np.array( [[-1.5, 2.5]]), x2_init=np.array([[-1.5+5*np.cos(np.deg2rad(225)), 2.5+5*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -3.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=1),
-Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=1),
+# Scenario(name="Scenario_2", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 3.0}], Nmc=1),
 # Scenario(name="Scenario_3", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}], Nmc=100),
 # Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
 
-# Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}]),
+# Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=1),
+Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=100),
+# Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_7", x1_init=np.array([[2.0, -1.0]]), x2_init=np.array([[5.0, -1.0]]), x1_des=np.array([[2.0, 8.0]]), theta_des=np.deg2rad(0.0), obstacles=[{"Pos": np.array([[3.0, 4.0]]), "diam": 0.5}]),
@@ -178,27 +180,27 @@ def run_single_mc(
                 
                 GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, alpha, beta, z0=z0, log=log)
                 
-                if not GameSol.success:
-                    Ntries = 5
-                    dalpha = (0.9-0.1)/Ntries
-                    dbeta = (0.9-0.1)/Ntries
-                    for i_dalpha in range(0,Ntries+1):
-                        GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1+dalpha*i_dalpha, 0.1+dbeta*i_dalpha, z0=z0, log=log)
-                        if GameSol.success: break
-                    else:
-                        Generalz0 = GeneralGameSol.z0
-                        Generalz0[:z0.shape[0]] = z0
-                        GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=log)
-                    if i_dalpha>0 and GameSol.success:
-                        success = False
-                        for i_dalpha_back in range(i_dalpha,-1,-1):
-                            GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1 + dalpha*i_dalpha_back, 0.1 + dbeta*i_dalpha_back, log=log)
-                            if GameSol.success: 
-                                success = True
-                        if success: 
-                            GameSol.success = True
-                        else:
-                            GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
+                # if not GameSol.success:
+                #     Ntries = 2
+                #     dalpha = (0.9-0.1)/Ntries
+                #     dbeta = (0.9-0.1)/Ntries
+                #     for i_dalpha in range(0,Ntries+1):
+                #         GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1+dalpha*i_dalpha, 0.1+dbeta*i_dalpha, z0=z0, log=log)
+                #         if GameSol.success: break
+                #     else:
+                #         Generalz0 = GeneralGameSol.z0
+                #         Generalz0[:z0.shape[0]] = z0
+                #         GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, z0=Generalz0, log=log)
+                #     if i_dalpha>0 and GameSol.success:
+                #         success = False
+                #         for i_dalpha_back in range(i_dalpha,-1,-1):
+                #             GameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, 0.1 + dalpha*i_dalpha_back, 0.1 + dbeta*i_dalpha_back, log=log)
+                #             if GameSol.success: 
+                #                 success = True
+                #         if success: 
+                #             GameSol.success = True
+                #         else:
+                #             GeneralGameSol.Solve(t, x1_state, v1_state, x1_des, x2_state, v2_state, x2_des, log=log)
                 
             if not GameSol.success and SolverType == 'DG':
                 # x1_guess, v1_guess, a1_guess = GameSol.MPC_guess_human_calc(x1_state, v1_state, x1_des)
@@ -220,7 +222,7 @@ def run_single_mc(
                 z0[GameSol.indx_ay2:GameSol.indx_ay2 + N] = a2_guess[:, 1]
                 
                 # Calculate Solution with alpha = alpha+dalpha for feasibility check
-                Ntries = 3
+                Ntries = 2
                 dalpha = (0.9-0.1)/Ntries - alpha
                 dbeta = (0.9-0.1)/Ntries - beta
                 for i_dalpha in range(0,Ntries+1):
@@ -259,17 +261,38 @@ def run_single_mc(
             a1_cmd[0,:] = 2.0 * np.linalg.norm(v1_state) * np.cross(v_3d, lam_dot)[0:2]
             # Velocity matching term
             tau = 0.5
-            Vel_near_Obs = 1.0
-            if Scenario.obstacles:
-                for Obstcle in Scenario.obstacles:
-                    dist_to_obs = np.linalg.norm(x1_state - Obstcle['Pos']) - Obstcle['diam']/2
-                    Vel_near_Obs = Vel_near_Obs*min(1.0, dist_to_obs / (Obstcle['diam']/2))
-            a1_cmd += (min(max(0.0,pp_dist-0.2)/(3*tau),Vel_near_Obs*GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
-            a1_cmd = limited_cmd(a1_cmd, a1_acc_limit)
+            if t <4.0:
+                a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max*0.6) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+            else:
+                a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+            a1_cmd = limited_cmd(a1_cmd, GameSol.a1_max)
         else:
-            a1_cmd = GameSol.sol.a1[i_acc, :]
-        if n_mc >= 1:
-            a1_cmd += 1.25 * np.random.normal(0.0, 1.0, 2)
+            a1_cmd = GameSol.sol.a1_sol[i_acc, :]
+        if n_mc >= 0:
+            a1_cmd += 2.0 * np.random.normal(0.0, 1.0, 2)
+
+        # if Human_PreDefined_Traj:
+        #     a1_cmd = np.zeros((1,2))
+        #     # Pursuit point
+        #     pp_dist = np.linalg.norm(x1_des - x1_state)
+        #     pp_point = x1_des + pp_dist * pp_factor * np.array([np.cos(pp_theta), np.sin(pp_theta)])
+        #     dpos_3d = np.array( [pp_point[0,0] - x1_state[0,0], pp_point[0,1] - x1_state[0,1], 0])
+        #     v_3d = np.array( [v1_state[0,0], v1_state[0,1], 0])
+        #     lam_dot = np.cross(dpos_3d, v_3d) / (np.linalg.norm(dpos_3d)**2 + 1e-6)
+        #     a1_cmd[0,:] = 2.0 * np.linalg.norm(v1_state) * np.cross(v_3d, lam_dot)[0:2]
+        #     # Velocity matching term
+        #     tau = 0.5
+        #     Vel_near_Obs = 1.0
+        #     if Scenario.obstacles:
+        #         for Obstcle in Scenario.obstacles:
+        #             dist_to_obs = np.linalg.norm(x1_state - Obstcle['Pos']) - Obstcle['diam']/2
+        #             Vel_near_Obs = Vel_near_Obs*min(1.0, dist_to_obs / (Obstcle['diam']))
+        #     a1_cmd += (min(max(0.0,pp_dist-0.2)/(3*tau),Vel_near_Obs*GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
+        #     a1_cmd = limited_cmd(a1_cmd, a1_acc_limit)
+        # else:
+        #     a1_cmd = GameSol.sol.a1[i_acc, :]
+        # if n_mc >= 1:
+        #     a1_cmd += 1.25 * np.random.normal(0.0, 1.0, 2)
                         
         if Scenario.obstacles and Human_PreDefined_Traj:
             for Obstcle in Scenario.obstacles:
@@ -383,6 +406,7 @@ def run_single_mc(
     if infeasible_run:
         dist_mean = -1.0
         dist_std = -1.0
+        dist_max = -1.0
         a1_mean = -1.0
         a1_std = -1.0
         a2_mean = -1.0
@@ -391,8 +415,9 @@ def run_single_mc(
         confidence_mean = -1.0
         confidence_std = -1.0
     else:
-        dist_mean = dist_series.mean()
-        dist_std = dist_series.std()
+        dist_mean = np.abs(dist_series-GameSol.d).mean()
+        dist_std = np.abs(dist_series-GameSol.d).std()
+        dist_max = np.abs(dist_series-GameSol.d).max()
         a1_mean = a1_mag.mean()
         a1_std = a1_mag.std()
         a2_mean = a2_mag.mean()
@@ -407,6 +432,7 @@ def run_single_mc(
         n_mc + 1,
         dist_mean,
         dist_std,
+        dist_max,
         a1_mean,
         a1_std,
         a2_mean,
@@ -468,7 +494,7 @@ def run_scenario(Scenario: Scenario):
                 if not RT_Plot and len(mc_indices) == 1:
                     mc_run_stats.append(run_single_mc(Scenario, alpha, beta, i, mc_indices[0], SolverType, None))
                     continue
-                max_workers = max(1, min(32, len(mc_indices), (os.cpu_count()-12 or 1)))
+                max_workers = max(1, min(32, len(mc_indices), (os.cpu_count()-12 or 2)))
                 # Use spawn so Julia is initialized fresh per worker (fork can cause ReadOnlyMemoryError)
                 with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
                     futures = [
@@ -490,6 +516,7 @@ def run_scenario(Scenario: Scenario):
             "mc_run",
             "distance_mean",
             "distance_std",
+            "distance_max",
             "a1_acc_mean",
             "a1_acc_std",
             "a2_acc_mean",

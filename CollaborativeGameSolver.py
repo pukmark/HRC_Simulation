@@ -49,12 +49,12 @@ class CollaborativeGame():
         self.delta_d = delta_d
 
         self.d_min, self.d_max = d-delta_d, d+delta_d
-        self.v1_max = 2.0
-        self.a1_max = 10.0
-        self.v2_max = 5.0
-        self.a2_max = 20.0
-        self.xlim = [-10.0, 10.0]
-        self.ylim = [-10.0, 10.0]
+        self.v1_max = 1.5
+        self.a1_max = 5.0
+        self.v2_max = 3.0
+        self.a2_max = 25.0
+        self.xlim = [-5.0, 10.0]
+        self.ylim = [-0.0, 10.0]
 
         # Define the states and controls
         x1, x2 = ca.SX.sym('x1', N+1, 2), ca.SX.sym('x2', N+1, 2)
@@ -137,7 +137,7 @@ class CollaborativeGame():
         pc2 = []
         for k in range(N):
             pc2.append(self.v2_max**2 - ca.sumsqr(v2[k+1,:]))
-            pc2.append(self.a2_max**2 - ca.sumsqr(a2[k,:]))
+            # pc2.append(self.a2_max**2 - ca.sumsqr(a2[k,:]))
             # pc2.append(x2[k+1,0]-self.xlim[0])
             # pc2.append(self.xlim[1]-x2[k+1,0])
             # pc2.append(x2[k+1,1]-self.ylim[0])
@@ -156,9 +156,9 @@ class CollaborativeGame():
             scL_vec.append(ca.sumsqr(x1[k+1,:]-x2[k+1,:]) - self.d_min**2 - SlackL[k]**2) # (x1-x2)**2 - d_min**2 >=0
             if Obstcles is not None:
                 for iObs, Obstcle in enumerate(Obstcles):
-                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/5)))
+                    factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
                     for factor in factors:
-                        scOA_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:] - Obstcle['Pos']) - (Obstcle['diam']/2)**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
+                        scOA_vec.append(ca.sumsqr(factor*x1[k+1,:]+(1-factor)*x2[k+1,:] - Obstcle['Pos']) - (Obstcle['diam']/2)**2 + SlackL[k]**2) # (fac*x1+(1-fac)*x2-Obs)**2 - r_Obs**2 >=0
         scL_vec = ca.horzcat(*scL_vec).T
         scOA_vec = ca.horzcat(*scOA_vec).T
         sigL = ca.SX.sym('sc1', scL_vec.shape[0])
@@ -271,6 +271,9 @@ class CollaborativeGame():
         self.MPC_guess_human_init()
         self.MPC_guess_robot_init()
         self.Centralized_MPC_init()
+        
+        self.Centralized_MPC_sol = SimpleNamespace()
+        self.Centralized_MPC_sol.success = False
 
 
     def Solve(self, time, x1_0, v1_0, x1_f, x2_0, v2_0, x2_f, alpha, beta, z0 = None, log: bool = True):
@@ -647,6 +650,7 @@ class CollaborativeGame():
         x1_tgt = opti.parameter(1, self.n_dim)
         x2_tgt = opti.parameter(1, self.n_dim)
         alpha = opti.parameter(1)
+        Confidence = opti.parameter(1)
         
         # Slice views for readability
         x1, x2 = x[0:self.N+1, :], x[self.N+1:, :]
@@ -654,9 +658,9 @@ class CollaborativeGame():
         a1, a2 = a[0:self.N, :], a[self.N:, :]
 
         # Objective: terminal accuracy + smooth controls + small velocity penalty + Slack penalty
-        opti.minimize((1-alpha)*0.1*ca.sumsqr(a1) + (1-alpha)*ca.sumsqr(x1[self.N, :] - x1_tgt) + 
-                      alpha*0.1*ca.sumsqr(a2) + alpha*ca.sumsqr(x2[self.N, :] - x2_tgt) +
-                      1e4*ca.sumsqr(Slack) )
+        a_confidence_factor = 1.0 + np.linspace(2, 0.0, self.N)*(1.0 - Confidence)**2.0  # from Confidence to 2-Confidence
+        opti.minimize((1-alpha)*(0.1*ca.sumsqr(a_confidence_factor*a1) + ca.sumsqr(x1[:, 0] - x1_tgt[0]) + ca.sumsqr(x1[:, 1] - x1_tgt[1])) + 
+                          alpha*(0.1*ca.sumsqr(a2) + ca.sumsqr(x2[:, 0] - x2_tgt[0]) + ca.sumsqr(x2[:, 1] - x2_tgt[1]) + 1e4*ca.sumsqr(Slack)))
 
         # Initial conditions
         opti.subject_to(x1[0, :] == x1_0)
@@ -673,9 +677,9 @@ class CollaborativeGame():
             opti.subject_to(x2[k+1, :] == x2[k, :] + self.dt*v2[k, :] + 0.5*self.dt**2*a2[k, :])
             # Speed/acc bounds
             opti.subject_to(self.v1_max**2 >= ca.sumsqr(v1[k+1, :]))
-            opti.subject_to(self.a1_max**2 >= ca.sumsqr(a1[k, :]))
+            # opti.subject_to(self.a1_max**2 >= ca.sumsqr(a1[k, :]))
             opti.subject_to(self.v2_max**2 >= ca.sumsqr(v2[k+1, :]))
-            opti.subject_to(self.a2_max**2 >= ca.sumsqr(a2[k, :]))
+            # opti.subject_to(self.a2_max**2 >= ca.sumsqr(a2[k, :]))
             # Distance constraints between agents
             opti.subject_to(self.d_max**2 + Slack[k]**2 >= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
             opti.subject_to(self.d_min**2 - Slack[k]**2 <= ca.sumsqr(x1[k+1, :] - x2[k+1, :]))
@@ -684,13 +688,13 @@ class CollaborativeGame():
                 opti.subject_to(ca.sumsqr(x1[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
                 opti.subject_to(ca.sumsqr(x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2)
                 d = (self.d_max + self.d_min)/2
-                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/5)))
+                factors = np.linspace(0.0, 1.0, 1+int(d/(Obstcle['diam']/4)))
                 for factor in factors[1:-1]:
-                    opti.subject_to( ca.sumsqr((1-factor)*x1[k+1, :] + factor*x2[k+1, :] - Obstcle['Pos']) >= (Obstcle['diam']/2)**2 )
+                    opti.subject_to( ca.sumsqr((1-factor)*x1[k+1, :] + factor*x2[k+1, :] - Obstcle['Pos']) + Slack[k]**2 >= (Obstcle['diam']/2)**2 )
 
         opts = {"print_time": 0,
-                "ipopt": {"mu_strategy": "adaptive",
-                          "tol": 1e-6,
+                "ipopt": {"tol": 1e-6,
+                        #   "mu_strategy": "adaptive",
                           "print_level": 0,
                           'print_frequency_iter': 5,
                           "timing_statistics": "no",
@@ -710,6 +714,7 @@ class CollaborativeGame():
         self.centralized_mpc.x1_tgt = x1_tgt
         self.centralized_mpc.x2_tgt = x2_tgt
         self.centralized_mpc.alpha = alpha
+        self.centralized_mpc.Confidence = Confidence
 
         return
 
@@ -725,11 +730,38 @@ class CollaborativeGame():
         self.centralized_mpc.opti.set_value(self.centralized_mpc.x1_tgt, x1_tgt)
         self.centralized_mpc.opti.set_value(self.centralized_mpc.x2_tgt, x2_tgt)
         self.centralized_mpc.opti.set_value(self.centralized_mpc.alpha, alpha)
+        self.centralized_mpc.opti.set_value(self.centralized_mpc.Confidence, self.confidence)
 
+        if self.Centralized_MPC_sol.success:
+            x1_guess = np.array(x1_0, copy=True)
+            x2_guess = np.array(x2_0, copy=True)
+            v1_guess = np.array(v1_0, copy=True)
+            v2_guess = np.array(v2_0, copy=True)
+            for k in range(self.N+1):
+                self.centralized_mpc.opti.set_initial(self.centralized_mpc.x[k, :], x1_guess)
+                self.centralized_mpc.opti.set_initial(self.centralized_mpc.v[k, :], v1_guess)
+                self.centralized_mpc.opti.set_initial(self.centralized_mpc.x[self.N+1 + k, :], x2_guess)
+                self.centralized_mpc.opti.set_initial(self.centralized_mpc.v[self.N+1 + k, :], v2_guess)
+                a1_guess = self.Centralized_MPC_sol.a1[min(k+1, self.N-1)]
+                a2_guess = self.Centralized_MPC_sol.a2[min(k+1, self.N-1)]
+                if k < self.N:
+                    self.centralized_mpc.opti.set_initial(self.centralized_mpc.a[k, :], a1_guess)
+                    self.centralized_mpc.opti.set_initial(self.centralized_mpc.a[self.N + k, :], a2_guess)
+                    self.centralized_mpc.opti.set_initial(self.centralized_mpc.Slack[k], 0.0)
+
+                x1_guess = x1_guess + self.dt*v1_guess + 0.5*a1_guess*self.dt**2
+                x2_guess = x2_guess + self.dt*v2_guess + 0.5*a2_guess*self.dt**2
+                v1_guess = v1_guess + self.dt*a1_guess
+                v2_guess = v2_guess + self.dt*a2_guess
+                    
+                    
+            
+                
+            
         # Linear interpolation guess between start and goal for both agents
         T_horizon = self.N * self.dt
-        v1_guess = (x1_tgt - x1_0) / max(T_horizon, 1e-6)
-        v2_guess = (x2_tgt - x2_0) / max(T_horizon, 1e-6)
+        v1_guess = 0.0*(x1_tgt - x1_0) / max(T_horizon, 1e-6)
+        v2_guess = 0.0*(x2_tgt - x2_0) / max(T_horizon, 1e-6)
         v1_norm = np.linalg.norm(v1_guess)
         v2_norm = np.linalg.norm(v2_guess)
         if v1_norm > self.v1_max:
@@ -746,10 +778,14 @@ class CollaborativeGame():
             self.centralized_mpc.opti.set_initial(self.centralized_mpc.v[self.N+1 + k, :], v2_guess)
             if k < self.N:
                 self.centralized_mpc.opti.set_initial(self.centralized_mpc.a[k, :], np.zeros((1, self.n_dim)))
+                self.centralized_mpc.opti.set_initial(self.centralized_mpc.a[k, :], np.zeros((1, self.n_dim)))
                 self.centralized_mpc.opti.set_initial(self.centralized_mpc.a[self.N + k, :], np.zeros((1, self.n_dim)))
                 self.centralized_mpc.opti.set_initial(self.centralized_mpc.Slack[k], 0.0)
             x1_guess = x1_guess + self.dt*v1_guess
             x2_guess = x2_guess + self.dt*v2_guess
+
+
+
 
         self.success = False
         try:
@@ -776,18 +812,22 @@ class CollaborativeGame():
             plt.grid(True)
             plt.pause(0.1)
             
-        self.Centralized_MPC_sol = SimpleNamespace()
-        self.Centralized_MPC_sol.time = time
-        self.Centralized_MPC_sol.x1 = x1_sol
-        self.Centralized_MPC_sol.v1 = v1_sol
-        self.Centralized_MPC_sol.a1 = a1_sol
-        self.Centralized_MPC_sol.x2 = x2_sol
-        self.Centralized_MPC_sol.v2 = v2_sol
-        self.Centralized_MPC_sol.a2 = a2_sol
-        self.Centralized_MPC_sol.Slack = Slack_sol
-        self.Centralized_MPC_sol.alpha = alpha
-        self.Centralized_MPC_sol.beta = 0.0
-        self.Centralized_MPC_sol.confidence = self.confidence
+        if self.success:
+            self.Centralized_MPC_sol = SimpleNamespace()
+            self.Centralized_MPC_sol.success = self.success
+            self.Centralized_MPC_sol.time = time
+            self.Centralized_MPC_sol.x1 = x1_sol
+            self.Centralized_MPC_sol.v1 = v1_sol
+            self.Centralized_MPC_sol.a1 = a1_sol
+            self.Centralized_MPC_sol.x2 = x2_sol
+            self.Centralized_MPC_sol.v2 = v2_sol
+            self.Centralized_MPC_sol.a2 = a2_sol
+            self.Centralized_MPC_sol.Slack = Slack_sol
+            self.Centralized_MPC_sol.alpha = alpha
+            self.Centralized_MPC_sol.beta = 0.0
+            self.Centralized_MPC_sol.confidence = self.confidence
+        else:
+            self.Centralized_MPC_sol.success = self.success
 
         return x1_sol, v1_sol, a1_sol, x2_sol, v2_sol, a2_sol, Slack_sol
     
