@@ -63,7 +63,7 @@ Scenarios: List[Scenario] =[
 # Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
 
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=1),
-Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=100),
+Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=200),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
@@ -494,7 +494,7 @@ def run_scenario(Scenario: Scenario):
                 if not RT_Plot and len(mc_indices) == 1:
                     mc_run_stats.append(run_single_mc(Scenario, alpha, beta, i, mc_indices[0], SolverType, None))
                     continue
-                max_workers = max(1, min(32, len(mc_indices), (os.cpu_count()-12 or 2)))
+                max_workers = max(1, min(32, len(mc_indices), (os.cpu_count()-12 or 10)))
                 # Use spawn so Julia is initialized fresh per worker (fork can cause ReadOnlyMemoryError)
                 with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context("spawn")) as executor:
                     futures = [
