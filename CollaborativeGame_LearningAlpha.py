@@ -29,8 +29,8 @@ os.system('clear')
 # alpha_vec = [0.1, 0.2, 0.3, 0.4, 0.5]
 # beta_vec  = [0.1, 0.2, 0.3, 0.4, 0.5]
 
-SolverType_vec = ['DG','Centralized']
-alpha_vec = [0.05, 0.1, 0.3, 0.5]
+SolverType_vec = ['DG']
+alpha_vec = [0.05]
 beta_vec  = [0.05]
 
 dalpha, dbeta = 0.1, 0.1
@@ -40,7 +40,7 @@ N = 10
 dt_Solver = 0.1
 dt_Sim = 0.1
 a1_acc_limit = 5.0
-Human_PreDefined_Traj = True
+Human_PreDefined_Traj = False
 Human_RandomWalk_Traj = False
 
 # Define the initial conditions
@@ -63,7 +63,8 @@ Scenarios: List[Scenario] =[
 # Scenario(name="Scenario_4", x1_init=np.array( [[-1.5, 6.5]]), x2_init=np.array([[-1.5+7*np.cos(np.deg2rad(225)), 6.5+7*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, -.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.5, 0.0]]), "diam": 1.5}, {"Pos": np.array([[2.5, 6.0]]), "diam": 1.5}], Nmc=1),
 
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=1),
-Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=200),
+# Scenario(name="Scenario_1", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=1),
+Scenario(name="Scenario_2", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5-3/np.sqrt(2), 6.5-3/np.sqrt(2)]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[{"Pos": np.array([[0.0, 4.0]]), "diam": 1.0}], Nmc=1),
 # Scenario(name="Scenario_3", x1_init=np.array([[-1.5, 6.5]]), x2_init=np.array([[-1.5+3*np.cos(np.deg2rad(225)), 6.5+3*np.sin(np.deg2rad(225))]]), x1_des=np.array([[8.0, 2.0]]), theta_des=np.deg2rad(90.0), obstacles=[], Nmc=100),
 # Scenario(name="Scenario_6_WithObs", x1_init=np.array([[3.0, 0.0]]), x2_init=np.array([[0.0, 0.0]]), x1_des=np.array([[7.0, 0.0]]), theta_des=np.deg2rad(60.0), obstacles=[{"Pos": np.array([[6.0, 2.0]]), "diam": 0.5}]),
 # Scenario(name="Scenario_6_Switch_WithObs", x1_init=np.array([[0.0, 0.0]]), x2_init=np.array([[3.0, 0.0]]), x1_des=np.array([[7.0, 4.0]]), theta_des=np.deg2rad(240.0), obstacles=[{"Pos": np.array([[4.5, 2.0]]), "diam": 0.5}]),
@@ -267,8 +268,8 @@ def run_single_mc(
                 a1_cmd += (min(pp_dist/(2*tau),GameSol.v1_max) -np.linalg.norm(v1_state)) / (tau) * (pp_point - x1_state) / np.linalg.norm(dpos_3d)
             a1_cmd = limited_cmd(a1_cmd, GameSol.a1_max)
         else:
-            a1_cmd = GameSol.sol.a1_sol[i_acc, :]
-        if n_mc >= 0:
+            a1_cmd = GameSol.sol.a1[i_acc, :]
+        if n_mc > 0:
             a1_cmd += 2.0 * np.random.normal(0.0, 1.0, 2)
 
         # if Human_PreDefined_Traj:
@@ -377,7 +378,7 @@ def run_single_mc(
                 max_payload_penetration,
             )
 
-        if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 2.0):
+        if EndSimulation or (t >= Tf) or (np.linalg.norm(x1_state - x1_des) + np.linalg.norm(x2_state - x2_des) < 0.5):
             EndSimulation = True
             if rt_plot:
                 finalize_plot_context(
@@ -476,12 +477,12 @@ def run_scenario(Scenario: Scenario):
     for SolverType in SolverType_vec:
         if SolverType == 'Centralized':
             beta1_vec = [0.5]
-        for alpha in alpha_vec:
+        for ialpha, alpha in enumerate(alpha_vec):
             for beta in beta1_vec:
                 if Scenario.Nmc <= 0:
                     continue
                 if RT_Plot and Scenario.Nmc == 1:
-                    mc_run_stats.append(run_single_mc(Scenario, alpha, beta, i, 0, SolverType, plot_context))
+                    mc_run_stats.append(run_single_mc(Scenario, alpha, beta, ialpha, 0, SolverType, plot_context))
                     mc_start = 1
                 else:
                     mc_start = 0
